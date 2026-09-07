@@ -1130,6 +1130,15 @@ local function scoreboard( ... )
 
 	table.sort(groups, function(a, b) return a.score > b.score end)
 
+	if not CoDHUD_BO2SB_LastDebug or CurTime() > CoDHUD_BO2SB_LastDebug then
+		CoDHUD_BO2SB_LastDebug = CurTime() + 2
+		local parts = {}
+		for _, g in ipairs(groups) do
+			table.insert(parts, g.key .. "=" .. #g.players)
+		end
+		print("[BO2 Scoreboard DEBUG] gm=" .. tostring(CoDHUD_ActiveGamemodeCL) .. " groups=" .. #groups .. " (" .. table.concat(parts, ", ") .. ") totalPlayers=" .. #player.GetAll())
+	end
+
 	-- Move the local player's own team to the front (top) of the list,
 	-- without changing the ordering of everyone else. Done as a plain
 	-- array move (not a custom table.sort comparator) so there's no risk
@@ -1225,11 +1234,13 @@ local function scoreboard( ... )
 			local iconY = sectionY + CoDHUD_S(CFG.ICON_Y_OFF)
 
 			if facKey ~= "dm" then
-				local iconPath = CoDHUD.Factions[hudtype][facKey].scoreIcon
-				local mat = Material(iconPath, "smooth")
-				surface.SetMaterial(mat)
-				surface.SetDrawColor(255,255,255,255)
-				surface.DrawTexturedRect(iconX, iconY, iconSize, iconSize)
+				local iconPath = fData and fData.scoreIcon
+				if iconPath then
+					local mat = Material(iconPath, "smooth")
+					surface.SetMaterial(mat)
+					surface.SetDrawColor(255,255,255,255)
+					surface.DrawTexturedRect(iconX, iconY, iconSize, iconSize)
+				end
 			end
 
 			surface.SetMaterial(MAT_BOXOVERLAY)
