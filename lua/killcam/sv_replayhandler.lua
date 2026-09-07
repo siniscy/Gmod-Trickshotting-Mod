@@ -10,11 +10,11 @@ hook.Add("Think", "Killcam - Frame Handling", function()
     if KC_Playing() and IsValid(KC_GetKiller()) and KC_GetKiller().KC_Recorder then
         local recorder = KC_GetKiller().KC_Recorder
         SetGlobalFloat("Killcam_TimeToKill", recorder:TimeRemaining() or 0)
-        if recorder:TimeSinceKill() >= 2 then
-            -- Back to full speed once the reload/aftermath footage has had
-            -- its 2 seconds -- TimeRemaining() alone can't do this since it
-            -- clamps at 0 and stays there forever after the kill, which is
-            -- why slow-mo used to hold all the way through the reload.
+        if recorder:TimeSinceKill() >= 0.75 then
+            -- Back to full speed shortly after impact -- TimeRemaining()
+            -- alone can't do this since it clamps at 0 and stays there
+            -- forever after the kill, which is why slow-mo used to hold
+            -- all the way through the reload.
             game.SetTimeScale(1)
         elseif recorder:TimeRemaining() < 0.5 then
             game.SetTimeScale(0.3)
