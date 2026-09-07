@@ -472,7 +472,27 @@ local function re_bonus( ... )
     if el < 0 then return end
     if el >= 6.0 then return end
     local iconAlpha = math.floor(math.Clamp(el / 1.0, 0, 1) * 255)
-	draw.SimpleTextOutlined( string.format( language.GetPhrase("MW2_MP_MATCH_BONUS_IS"), tostring(re_match_bonus) ), "BO2_RE_Bonus", ScrW() * 0.5, CoDHUD_SY(720), Color(240, 250, 110, iconAlpha), 1, 1, outlined and 1 or 0, Color(0,0,0, iconAlpha) )
+
+	-- Real BO2 draws "Match Bonus:" in white and the number + "XP" in
+	-- its gold accent colour, not the whole line in one flat colour.
+	local phrase = language.GetPhrase("MW2_MP_MATCH_BONUS_IS")
+	local prefix, suffix = phrase:match("^(.-)%%s(.*)$")
+	prefix = prefix or phrase
+	suffix = suffix or ""
+	local valueTxt = tostring(re_match_bonus) .. " XP" .. suffix
+
+	local whiteCol  = Color(255, 255, 255, iconAlpha)
+	local goldCol   = Color(255, 199, 0, iconAlpha)
+	local shadowCol = Color(0, 0, 0, iconAlpha)
+	local y = CoDHUD_SY(720)
+
+	surface.SetFont("BO2_RE_Bonus")
+	local pw = surface.GetTextSize(prefix)
+	local vw = surface.GetTextSize(valueTxt)
+	local startX = ScrW() * 0.5 - (pw + vw) / 2
+
+	draw.SimpleTextOutlined( prefix, "BO2_RE_Bonus", startX, y, whiteCol, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, outlined and 1 or 0, shadowCol )
+	draw.SimpleTextOutlined( valueTxt, "BO2_RE_Bonus", startX + pw, y, goldCol, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, outlined and 1 or 0, shadowCol )
 end
 CoDHUD[hudtype].RoundEndBonus = re_bonus
 
