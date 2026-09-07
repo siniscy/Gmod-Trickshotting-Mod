@@ -209,6 +209,22 @@ RegisterData("buttons", {
     Set = function(pl, cmd, btns) cmd:SetButtons(btns) end,
 })
 
+-- EXPERIMENTAL: force the weapon's raw fire sound on CHAN_AUTO, which the
+-- engine guarantees a free channel for rather than making it compete for a
+-- shared one -- so it can't get cut off by (or cut off) anything else
+-- playing at the same time. This is purely additive alongside whatever
+-- DoAttackEvent() already does internally (TFA Base's own channel choice
+-- is opaque to us) -- if a weapon has no ordinary Primary.Sound to find,
+-- this silently does nothing and nothing changes.
+local function ForceGunSoundAuto(wep)
+    if not IsValid(wep) or not wep.Primary then return end
+    local snd = wep.Primary.Sound
+    if istable(snd) then snd = snd[1] end
+    if isstring(snd) and snd ~= "" then
+        wep:EmitSound(snd, 75, 100, 1, CHAN_AUTO)
+    end
+end
+
 RegisterData("weapon", {
     serverside = true,
     clientside = false,
@@ -273,6 +289,7 @@ RegisterData("weapon", {
                             if not (frame and frame.kill) then
                                 pl:DoAttackEvent()
                             end
+                            ForceGunSoundAuto(wep)
                         end
                     end
                 end
@@ -305,6 +322,7 @@ RegisterData("shot", {
     Set = function(pl, cmd)
         if pl.KC_Recorder:GetFrame(KC_ServerTick()).kill then
             pl:DoAttackEvent()
+            ForceGunSoundAuto(pl:GetActiveWeapon())
         end
     end,
 })
