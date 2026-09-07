@@ -57,6 +57,7 @@ local HUD_FACTIONS = {
     mw3  = { player = "delta",    bot = "ussr"    },
     cod4 = { player = "marines",  bot = "arab"    },
     bo1  = { player = "sog",      bot = "nva"     },
+    bo2  = { player = "seals",    bot = "sdc"     },
     waw  = { player = "american", bot = "german"  },
 }
 
