@@ -140,7 +140,22 @@ RegisterData("pos", {
     Get = function(pl, _) return pl:GetPos() end,
     Set = function(pl, _, pos)
         if pl.KILLCAM_StartDataInitiated then
-            if pos:DistToSqr(pl:GetPos()) > 25 then
+            local distSqr = pos:DistToSqr(pl:GetPos())
+            if distSqr > 40000 then
+                -- The recorded position jumped a huge distance from the
+                -- previous frame -- noclip flying, an admin teleport, a
+                -- round-start/spawn reset, etc. happening during the
+                -- ~10s recording window. Chasing that with SetVelocity
+                -- (the normal smoothing path below) can't reproduce an
+                -- instant teleport: it either drags the replay across the
+                -- map over several seconds or slams into world geometry
+                -- at absurd speed and gets stuck, which is why the killer
+                -- sometimes ends up nowhere near where they should be
+                -- during killcam. Snap instantly instead, matching the
+                -- real teleport that produced this frame.
+                pl:SetPos(pos)
+                pl:SetVelocity(vector_origin)
+            elseif distSqr > 25 then
                 pl:SetVelocity((pos-pl:GetPos())*9)
             end
         else
@@ -224,12 +239,35 @@ RegisterData("weapon", {
                 if recorder and tick and tick > 1 then
                     local prevFrame  = recorder.replay_frames[tick - 1]
                     local prevWeapon = prevFrame and prevFrame.weapon
-                    if prevWeapon and prevWeapon[1] == weptbl[1]
-                        and weptbl[2] and prevWeapon[2] and weptbl[2] > prevWeapon[2] then
-                        print("[ReloadFix DEBUG] Detected reload during replay: " .. pl:Nick()
-                            .. " " .. weptbl[1] .. " clip " .. prevWeapon[2] .. " -> " .. weptbl[2]
-                            .. " (tick " .. tick .. ") -- firing SendWeaponAnim(ACT_VM_RELOAD)")
-                        wep:SendWeaponAnim(ACT_VM_RELOAD)
+                    if prevWeapon and prevWeapon[1] == weptbl[1] and weptbl[2] and prevWeapon[2] then
+                        if weptbl[2] > prevWeapon[2] then
+                            print("[ReloadFix DEBUG] Detected reload during replay: " .. pl:Nick()
+                                .. " " .. weptbl[1] .. " clip " .. prevWeapon[2] .. " -> " .. weptbl[2]
+                                .. " (tick " .. tick .. ") -- firing SendWeaponAnim(ACT_VM_RELOAD)")
+                            wep:SendWeaponAnim(ACT_VM_RELOAD)
+                        elseif weptbl[2] < prevWeapon[2] then
+                            -- A shot was fired at this point in the original
+                            -- recording. The natural replay path for this
+                            -- (the "buttons" data type replaying IN_ATTACK)
+                            -- is clientside-only prediction on a puppet that
+                            -- isn't the local player's own weapon -- some
+                            -- weapon bases (TFA Base, used by every weapon
+                            -- in this addon) skip re-emitting a predicted
+                            -- fire sound in that situation, which is why the
+                            -- shot sound sometimes went silent during
+                            -- killcam. Force it the same reliable, server-
+                            -- side way the kill shot itself already does
+                            -- (see the "shot" data type below) so every
+                            -- shot is audible, not just the last one. Skip
+                            -- the kill frame itself -- it already gets its
+                            -- own DoAttackEvent() call from "shot", and
+                            -- firing twice in the same tick would double up
+                            -- the sound/muzzle flash.
+                            local frame = recorder:GetFrame(tick)
+                            if not (frame and frame.kill) then
+                                pl:DoAttackEvent()
+                            end
+                        end
                     end
                 end
 
