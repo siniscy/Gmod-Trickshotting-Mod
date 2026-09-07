@@ -69,6 +69,7 @@ if CLIENT then
 		local desc = medalData[2]
 
 		table.insert(medalQueue, {
+			id        = medalID,
 			text      = txt,
 			hasIcon   = hasIcon,
 			points    = pts,

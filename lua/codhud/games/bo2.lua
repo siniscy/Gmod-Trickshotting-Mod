@@ -666,10 +666,22 @@ local function medals( ... )
 	mat:Translate(Vector(cx, cy, 0))
 	mat:Scale(Vector(scale, scale, 1))
 	mat:Translate(Vector(-cx, -cy, 0))
+	-- The medal icon PNGs (hud_medals_headshot.png etc.) already exist in
+	-- materials/bo2/medals/ but MedalsTable never pointed to them and the
+	-- backing glow referenced a file that doesn't exist anywhere in the
+	-- addon (hud_notification_medal_backing.png) -- that's the "purple and
+	-- black missing texture" look. Backing now uses the real medal-glow
+	-- asset, and the actual per-medal icon is drawn above the title.
+	local medalData = CoDHUD[hudtype].MedalsTable[activeMedal.id]
+	local iconPath = (medalData and medalData[3]) or "bo2/medals/hud_medals_default.png"
+	local iconSizeSm = CoDHUD_S(56)
 	cam.PushModelMatrix(mat)
-		surface.SetDrawColor(255, 0, 0, math.Clamp(alpha, 0, 50))
-		surface.SetMaterial(Material(hudtype .. "/icons/hud_notification_medal_backing.png", "smooth"))
+		surface.SetDrawColor(255, 255, 255, math.Clamp(alpha, 0, 60))
+		surface.SetMaterial(Material(hudtype .. "/hud/lui_medal_glow.vtf", "smooth"))
 		surface.DrawTexturedRect(cx - iconSize, cy - (iconSize * 0.5), iconSize * 2, iconSize)
+		surface.SetDrawColor(255, 255, 255, alpha)
+		surface.SetMaterial(Material(iconPath, "smooth"))
+		surface.DrawTexturedRect(cx - (iconSizeSm * 0.5), cy - CoDHUD_S(85), iconSizeSm, iconSizeSm)
 		draw.SimpleTextOutlined( language.GetPhrase(activeMedal.text), "BO2_MedalPrimary", cx, cy - CoDHUD_S(20), colWhite, 1, 1, outlined and 1.5 or 0, colBlack )
 		if activeMedal.desc then
 			local localizedDesc = language.GetPhrase(activeMedal.desc)
@@ -697,15 +709,15 @@ end
 CoDHUD[hudtype].Medals = medals
 CoDHUD[hudtype].MedalsSound = "hud/bo2/metal_3.SN65.pc.snd.mp3"
 CoDHUD[hudtype].MedalsTable = {
-	["headshot"] = { "BO2_MEDAL_HEADSHOT", nil },
-	["doublekill"] = { "BO2_MEDAL_MULTIKILL_2", nil },
-	["triplekill"] = { "BO2_MEDAL_MULTIKILL_3", nil },
-	["multikill"] = { "BO2_MEDAL_MULTIKILL_4", nil },
-	["longshot"] = { "BO2_MEDAL_LONGSHOT_KILL", nil },
-	["oneshot"] = { "BO2_MEDAL_KILL_ENEMY_ONE_BULLET", nil },
-	["firstblood"] = { "BO2_MEDAL_FIRST_KILL", nil },
-	["comeback"] = { "BO2_MEDAL_COMEBACK_FROM_DEATHSTREAK", nil },
-	["payback"] = { "BO2_MEDAL_REVENGE_KILL", nil },
+	["headshot"] = { "BO2_MEDAL_HEADSHOT", nil, "bo2/medals/hud_medals_headshot.png" },
+	["doublekill"] = { "BO2_MEDAL_MULTIKILL_2", nil, "bo2/medals/hud_medals_doublekill.png" },
+	["triplekill"] = { "BO2_MEDAL_MULTIKILL_3", nil, "bo2/medals/hud_medals_triplekill.png" },
+	["multikill"] = { "BO2_MEDAL_MULTIKILL_4", nil, "bo2/medals/hud_medals_quadkill.png" },
+	["longshot"] = { "BO2_MEDAL_LONGSHOT_KILL", nil, "bo2/medals/hud_medals_longshot.png" },
+	["oneshot"] = { "BO2_MEDAL_KILL_ENEMY_ONE_BULLET", nil, "bo2/medals/hud_medals_oneshot_onekill.png" },
+	["firstblood"] = { "BO2_MEDAL_FIRST_KILL", nil, "bo2/medals/hud_medals_firstblood.png" },
+	["comeback"] = { "BO2_MEDAL_COMEBACK_FROM_DEATHSTREAK", nil, "bo2/medals/hud_medals_comeback.png" },
+	["payback"] = { "BO2_MEDAL_REVENGE_KILL", nil, "bo2/medals/hud_medals_revenge.png" },
 }
 
 local function minimap( ... )
