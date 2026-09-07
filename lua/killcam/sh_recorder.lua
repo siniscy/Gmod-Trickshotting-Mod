@@ -59,6 +59,20 @@ function recObj:TimeRemaining()
     return math.Clamp(killFrame.time - curFrame.time, 0, 100)
 end
 
+-- TimeRemaining() clamps at 0 and stays there for every frame at or after
+-- the kill, so it can't tell the difference between "just hit the shot"
+-- and "several seconds into the post-kill footage" -- which is why the
+-- slow-mo triggered by TimeRemaining() < 0.5 used to hold all the way
+-- through the reload instead of just the moment of impact. This is the
+-- unclamped mirror of it: 0 up to the kill, then counts UP afterward.
+function recObj:TimeSinceKill()
+    if not self.killframeID then return 0 end
+    local killFrame = self.replay_frames[self.killframeID]
+    local curFrame  = self.replay_frames[KC_ServerTick()]
+    if not killFrame or not curFrame then return 0 end
+    return math.max(0, curFrame.time - killFrame.time)
+end
+
 function recObj:SetReplayFrames(pl_killer)
     if self.pl == pl_killer then 
         self.replay_frames = Killcam.CopyTable(self.kc_frames) 
