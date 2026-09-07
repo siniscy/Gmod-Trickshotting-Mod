@@ -1094,8 +1094,13 @@ local function scoreboard( ... )
     local scrW, scrH = ScrW(), ScrH()
     local lp = LocalPlayer()
 
+	-- CoDHUD_ActiveGamemodeCL is never actually set anywhere in the addon --
+	-- it's always nil. Read the real, live source of truth instead (same
+	-- convar every other HUD's scoreboard/scorebar already uses).
+	local gmCL = GetConVar("codhud_selected_gamemode") and GetConVar("codhud_selected_gamemode"):GetString() or ""
+
 	local groups = {}
-	if CoDHUD_ActiveGamemodeCL == "dm" or CoDHUD_ActiveGamemodeCL == "sesh_dm" then
+	if gmCL == "dm" or gmCL == "sesh_dm" then
 		local allPlayers = player.GetAll()
 		table.sort(allPlayers, SortLogic)
 		groups = { { key = "dm", players = allPlayers, score = 0 } }
@@ -1129,15 +1134,6 @@ local function scoreboard( ... )
 	end
 
 	table.sort(groups, function(a, b) return a.score > b.score end)
-
-	if not CoDHUD_BO2SB_LastDebug or CurTime() > CoDHUD_BO2SB_LastDebug then
-		CoDHUD_BO2SB_LastDebug = CurTime() + 2
-		local parts = {}
-		for _, g in ipairs(groups) do
-			table.insert(parts, g.key .. "=" .. #g.players)
-		end
-		print("[BO2 Scoreboard DEBUG] gm=" .. tostring(CoDHUD_ActiveGamemodeCL) .. " groups=" .. #groups .. " (" .. table.concat(parts, ", ") .. ") totalPlayers=" .. #player.GetAll())
-	end
 
 	-- Move the local player's own team to the front (top) of the list,
 	-- without changing the ordering of everyone else. Done as a plain
@@ -1186,7 +1182,7 @@ local function scoreboard( ... )
 	local timeStr = string.format("%d:%02d", mins, secs)
 	draw.SimpleTextOutlined( timeStr, "BO2_Scoreboard_Timer", headerX + CoDHUD_S(CFG.TIMER_X_POS), headerY, Color(255,255,255), TEXT_ALIGN_LEFT, 0, outlined and 1 or 0, Color(0,0,0) )
 
-	local gm = CoDHUD_ActiveGamemodeCL
+	local gm = gmCL
 	local gmname = language.GetPhrase(CoDHUD.Gamemodes[hudtype].Names[gm] or gm)
 	draw.SimpleTextOutlined( gmname .. " - " .. string.upper(game.GetMap()), "BO2_Scoreboard_Text2", headerX + CoDHUD_SX(CFG.MAPNAME_X_POS), headerY, Color(255,255,255), TEXT_ALIGN_LEFT, 0, outlined and 1 or 0, Color(0,0,0) )
 
@@ -1196,11 +1192,6 @@ local function scoreboard( ... )
 	draw.SimpleTextOutlined( language.GetPhrase("BO1_CGAME_SB_ASSISTS"), "BO2_Scoreboard_Text", barRight - CoDHUD_SX(CFG.OFF_ASSISTS), headerY, Color(255,255,255), TEXT_ALIGN_CENTER, 0, outlined and 1 or 0, Color(0,0,0) )
 	draw.SimpleTextOutlined( language.GetPhrase("BO1_CGAME_SB_KILLS"), "BO2_Scoreboard_Text", barRight - CoDHUD_SX(CFG.OFF_KILLS), headerY, Color(255,255,255), TEXT_ALIGN_CENTER, 0, outlined and 1 or 0, Color(0,0,0) )
 	draw.SimpleTextOutlined( language.GetPhrase("BO1_CGAME_SB_SCORE"), "BO2_Scoreboard_Text", barRight - CoDHUD_SX(CFG.OFF_SCORE), headerY, Color(255,255,255), TEXT_ALIGN_CENTER, 0, outlined and 1 or 0, Color(0,0,0) )
-
-	if not CoDHUD_BO2SB_LastDebug2 or CurTime() > CoDHUD_BO2SB_LastDebug2 then
-		CoDHUD_BO2SB_LastDebug2 = CurTime() + 2
-		print("[BO2 Scoreboard DEBUG2] about to draw " .. #groups .. " groups, startY=" .. tostring(startY) .. " barX=" .. tostring(barX) .. " barW=" .. tostring(barW) .. " scrW=" .. tostring(scrW) .. " scrH=" .. tostring(scrH))
-	end
 
 	render.SetScissorRect(0, viewportTop, ScrW(), viewportBottom, true)
 		for fi, facData in ipairs(groups) do
@@ -1227,11 +1218,6 @@ local function scoreboard( ... )
 			local factionRectH = (visualPlayers * (barH + CoDHUD_S(CFG.ROW_GAP))) + CoDHUD_S(6)
 			factionRectX = factionRectX - CoDHUD_S(260)
 			factionRectW = factionRectW + CoDHUD_S(260)
-
-			if not CoDHUD_BO2SB_LastDebug3 or CurTime() > CoDHUD_BO2SB_LastDebug3 then
-				CoDHUD_BO2SB_LastDebug3 = CurTime() + 2
-				print("[BO2 Scoreboard DEBUG3] group " .. fi .. " key=" .. tostring(facKey) .. " rect=" .. factionRectX .. "," .. factionRectY .. "," .. factionRectW .. "," .. factionRectH)
-			end
 
 			surface.SetDrawColor(0, 0, 0, 210)
 			surface.DrawRect( factionRectX, factionRectY, factionRectW, factionRectH )
