@@ -294,6 +294,34 @@ local function OpenLobby()
     end
     KC_Lobby_Frame = frame
 
+    -- Confirmed via the print above: this can read false with
+    -- realPlayers=0 -- meaning player.GetAll() didn't even see YOU yet,
+    -- not that you're genuinely not the host. That happens when the lobby
+    -- opens right at map load/connect, before this client's own
+    -- entity/roster state has settled -- a timing race, not a real
+    -- permissions answer. Since isHost is only computed once and baked
+    -- into the buttons below, a bad early read used to stay wrong for the
+    -- whole lobby session. Retry a few times shortly after and rebuild if
+    -- a fresh read now disagrees and would actually grant host controls.
+    if not isHost then
+        for _, delay in ipairs({0.5, 1.5, 3}) do
+            timer.Simple(delay, function()
+                if not IsValid(KC_Lobby_Frame) or KC_Lobby_Frame ~= frame then return end
+                if not KC_Lobby_ActiveCL then return end
+                local lp2 = LocalPlayer()
+                local realPlayers2 = 0
+                for _, p in ipairs(player.GetAll()) do
+                    if IsValid(p) and not p:IsBot() then realPlayers2 = realPlayers2 + 1 end
+                end
+                local isHostNow = IsValid(lp2) and (lp2:IsListenServerHost() or lp2:IsAdmin() or realPlayers2 <= 1)
+                if isHostNow then
+                    print("[KC Lobby] isHost flipped false -> true on retry, rebuilding lobby")
+                    OpenLobby()
+                end
+            end)
+        end
+    end
+
     -- ── Left sidebar menu ────────────────────────────────────────────────
     local sidebar = vgui.Create("DPanel", frame)
     sidebar:SetPos(60, 120)
