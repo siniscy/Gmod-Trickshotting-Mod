@@ -1197,6 +1197,11 @@ local function scoreboard( ... )
 	draw.SimpleTextOutlined( language.GetPhrase("BO1_CGAME_SB_KILLS"), "BO2_Scoreboard_Text", barRight - CoDHUD_SX(CFG.OFF_KILLS), headerY, Color(255,255,255), TEXT_ALIGN_CENTER, 0, outlined and 1 or 0, Color(0,0,0) )
 	draw.SimpleTextOutlined( language.GetPhrase("BO1_CGAME_SB_SCORE"), "BO2_Scoreboard_Text", barRight - CoDHUD_SX(CFG.OFF_SCORE), headerY, Color(255,255,255), TEXT_ALIGN_CENTER, 0, outlined and 1 or 0, Color(0,0,0) )
 
+	if not CoDHUD_BO2SB_LastDebug2 or CurTime() > CoDHUD_BO2SB_LastDebug2 then
+		CoDHUD_BO2SB_LastDebug2 = CurTime() + 2
+		print("[BO2 Scoreboard DEBUG2] about to draw " .. #groups .. " groups, startY=" .. tostring(startY) .. " barX=" .. tostring(barX) .. " barW=" .. tostring(barW) .. " scrW=" .. tostring(scrW) .. " scrH=" .. tostring(scrH))
+	end
+
 	render.SetScissorRect(0, viewportTop, ScrW(), viewportBottom, true)
 		for fi, facData in ipairs(groups) do
 			local players = facData.players
@@ -1222,6 +1227,11 @@ local function scoreboard( ... )
 			local factionRectH = (visualPlayers * (barH + CoDHUD_S(CFG.ROW_GAP))) + CoDHUD_S(6)
 			factionRectX = factionRectX - CoDHUD_S(260)
 			factionRectW = factionRectW + CoDHUD_S(260)
+
+			if not CoDHUD_BO2SB_LastDebug3 or CurTime() > CoDHUD_BO2SB_LastDebug3 then
+				CoDHUD_BO2SB_LastDebug3 = CurTime() + 2
+				print("[BO2 Scoreboard DEBUG3] group " .. fi .. " key=" .. tostring(facKey) .. " rect=" .. factionRectX .. "," .. factionRectY .. "," .. factionRectW .. "," .. factionRectH)
+			end
 
 			surface.SetDrawColor(0, 0, 0, 210)
 			surface.DrawRect( factionRectX, factionRectY, factionRectW, factionRectH )
