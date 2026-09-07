@@ -224,6 +224,26 @@ if CLIENT then
                     return
                 end
 
+                -- BO2 TDM shows a plain per-kill count: +100 per kill,
+                -- stacking into +200/+300 etc. for multiple kills close
+                -- together (via CoDHUD_AddScore's existing queue window).
+                -- Medal bonuses (firstblood, oneshot, ...) used to feed
+                -- their own +50 into that same stack -- a single kill with
+                -- a medal showed +150, two kills each with a medal showed
+                -- +300 instead of +200, etc. Kill count should be the only
+                -- thing stacking here, so drop the medal's score entirely
+                -- (animation/killfeed still plays via orig()).
+                local gmRaw = GetConVar("codhud_selected_gamemode")
+                gmRaw = gmRaw and gmRaw:GetString() or ""
+                local isBO2TDM = hudType == "bo2" and (gmRaw == "war" or gmRaw == "sesh_war")
+                if isBO2TDM then
+                    local realAddScore = _G.CoDHUD_AddScore
+                    _G.CoDHUD_AddScore = function(amt) end
+                    orig(len, ply)
+                    _G.CoDHUD_AddScore = realAddScore
+                    return
+                end
+
                 -- cod4/waw already get full XP from GetKillXP() on every kill
                 -- (via KC_HitNotification / CoDHUD_HitNotification). Most medal
                 -- bonuses on top of that would be double-counting, so suppress
