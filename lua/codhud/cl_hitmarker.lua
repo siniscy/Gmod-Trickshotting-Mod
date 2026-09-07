@@ -105,11 +105,16 @@ if CLIENT then
         local gmCV2 = GetConVar("codhud_selected_gamemode")
         print("[HM CLIENT] KC_HitNotification received isKill=" .. tostring(isKill) .. " gm=" .. tostring(gmCV2 and gmCV2:GetString()))
         if KC_Playing and KC_Playing() then
-            -- During killcam in sesh mode: force hitmarker + XP
+            -- This fires again when killcam replay reaches the death frame
+            -- of a kill that already happened live moments earlier (the
+            -- live kill goes through the "else" branch below, which
+            -- already awarded XP via DoHitmarker). Awarding XP again here
+            -- double-counted every single sesh kill (e.g. BO2 TDM's 100 XP
+            -- showing as +200). Keep the cosmetic hitmarker flash for the
+            -- replay -- just don't award XP a second time for it.
             -- Normal mode: KillcamNPCKilled handles the hitmarker, skip here to avoid double flash
             if IsSeshMode() then
                 if _G.CoDHUD_ForceHitmarker then _G.CoDHUD_ForceHitmarker() end
-                if _G.CoDHUD_AddScore then _G.CoDHUD_AddScore(GetKillXP()) end
             end
         else
             -- Outside killcam: only fire for sesh mode
