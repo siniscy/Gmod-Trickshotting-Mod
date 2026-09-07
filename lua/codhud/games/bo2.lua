@@ -489,24 +489,89 @@ local function hitmarker( ... )
 end
 CoDHUD[hudtype].Hitmarker = hitmarker
 
+-- Ported from the original mini_dm_gamemode addon -- the simplified
+-- rewrite that was here dropped the animated background flash chip
+-- entirely (intro white flash -> fade to a soft lavender chip -> hold
+-- -> exit fade) and drew bare floating text in a different screen
+-- position instead. Score values themselves are untouched either way.
 local function xp( ... )
-	local animtime = select(1, ...)
-	local scoreTime = select(2, ...)
-	local finalAlpha = select(3, ...)
-	local scoreScale = select(4, ...)
+	local animtime          = select(1, ...)
+	local scoreTime         = select(2, ...)
+	local finalAlpha        = select(3, ...)
+	local scoreScale        = select(4, ...)
 	local currentPulseAlpha = select(5, ...)
-	local scoreVal = select(6, ...)
-	local outlined = GetConVar("codhud_enable_outlinedtext"):GetBool()
+	local scoreVal          = select(6, ...)
+
 	local cx, cy = ScrW() / 2, ScrH() / 2
-	local drawAlpha = (currentPulseAlpha / 255) * finalAlpha
-	local drawY     = cy - CoDHUD_SY(140)
-	local mat = Matrix()
-	mat:Translate(Vector(cx, drawY, 0))
-	mat:Scale(Vector(scoreScale, scoreScale, 1))
-	mat:Translate(Vector(-cx, -drawY, 0))
-	cam.PushModelMatrix(mat)
-		DrawSqueezedScore(scoreVal, cx, drawY, drawAlpha)
-	cam.PopModelMatrix()
+	local drawX  = cx + CoDHUD_SY(90)
+	local drawY  = cy - CoDHUD_SY(90)
+
+	-- BO2 TIMINGS
+	local bgIntroTime   = 0.13
+	local textDelay     = 0.01
+	local textIntroTime = 0.03
+
+	local holdStart = bgIntroTime + textDelay + textIntroTime
+
+	-- sync with existing fade system
+	local remaining = math.max(scoreTime - CurTime(), 0)
+	local fadeFrac = math.Clamp(remaining / 0.3, 0, 1)
+	local isExiting = remaining <= 0.3
+
+	-- VISUAL STATE
+	local bgAlpha     = 0
+	local bgColorLerp = 0
+	local textAlpha   = 0
+
+	-- INTRO: WHITE BG FLASH
+	if animtime <= bgIntroTime then
+		local p = math.Clamp(animtime / bgIntroTime, 0, 1)
+		bgAlpha = Lerp(p, 255, 110)
+		bgColorLerp = p
+	-- TEXT INTRO
+	elseif animtime <= holdStart then
+		bgAlpha = 110
+		bgColorLerp = 1
+		local p = math.Clamp( (animtime - (bgIntroTime + textDelay)) / textIntroTime, 0, 1 )
+		textAlpha = Lerp(p, 0, 255)
+	-- HOLD
+	elseif not isExiting then
+		bgAlpha = 110
+		bgColorLerp = 1
+		textAlpha = 255
+	-- EXIT
+	else
+		textAlpha = 0
+		bgColorLerp = 0
+		bgAlpha = 255 * fadeFrac
+	end
+
+	-- COLORS
+	local flashColor = Color(175, 175, 225)
+	local drawBgCol = Color(
+		Lerp(bgColorLerp, 255, flashColor.r),
+		Lerp(bgColorLerp, 255, flashColor.g),
+		Lerp(bgColorLerp, 255, flashColor.b),
+		bgAlpha * (finalAlpha / 255)
+	)
+	local drawTextAlpha = textAlpha * (currentPulseAlpha / 255) * (finalAlpha / 255)
+
+	-- SIZE
+	surface.SetFont("BO2_Score_Main")
+	local txt = "+" .. tostring(scoreVal)
+	local tw, th = surface.GetTextSize(txt)
+	local padX = CoDHUD_SX(12)
+	local padY = CoDHUD_SY(12)
+	local bw = tw + padX * 2
+	local bh = th + padY * 2
+
+	-- BACKING
+	surface.SetMaterial( Material( hudtype .. "/hud/fade_team.vmt" ) )
+	surface.SetDrawColor(drawBgCol)
+	surface.DrawTexturedRect( drawX - bw * 1, drawY - bh * 1, bw * 2, bh * 2 )
+
+	-- TEXT
+	DrawSqueezedScore( scoreVal, drawX, drawY, drawTextAlpha )
 end
 CoDHUD[hudtype].XP = xp
 
@@ -1119,8 +1184,22 @@ local function scoreboard( ... )
 	else
 		local factions = {}
 		for _, p in ipairs(player.GetAll()) do
-			local fac = p:GetNW2String("CoDHUD_Faction", "seals")
-			if fac == "" then fac = "seals" end
+			-- "seals" was being used as the fallback for ANY player whose
+			-- faction hasn't networked to this client yet (a brief window
+			-- right after a bot spawns) -- since "seals" also happens to be
+			-- the real human faction, that visually merged a not-yet-synced
+			-- bot into the player's own team on the scoreboard. Only guess
+			-- for the local player (so you always see yourself immediately);
+			-- for anyone else, skip them this frame rather than guess wrong
+			-- -- their real faction shows up correctly within a tick or two.
+			local fac = p:GetNW2String("CoDHUD_Faction", "")
+			if fac == "" then
+				if p == lp then
+					fac = cookie.GetString("CoDHUD_SelectedFaction", "seals")
+				else
+					continue
+				end
+			end
 			factions[fac] = factions[fac] or {}
 			table.insert(factions[fac], p)
 		end
