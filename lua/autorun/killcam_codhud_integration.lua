@@ -24,6 +24,12 @@ function CoDHUD_GetScoreMultiplier()
     if hudType == "cod4" or hudType == "waw" then
         if gm == "dm" or gm == "sesh_dm" then return 5 end
         return 10  -- TDM and all other modes
+    elseif hudType == "bo2" then
+        -- Real BO2 shows TDM score as a plain kill count, not kills*100
+        -- like MW2/MW3/BO1 do -- 75 kills should read "75", not "7500".
+        if gm == "war" or gm == "sesh_war" then return 1 end
+        if gm == "dm" or gm == "sesh_dm" then return 50 end
+        return 100
     else
         -- MW2, MW3, BO1
         if gm == "dm" or gm == "sesh_dm" then return 50 end
