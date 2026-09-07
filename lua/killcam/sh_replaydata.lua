@@ -240,21 +240,18 @@ RegisterData("weapon", {
                     local prevFrame  = recorder.replay_frames[tick - 1]
                     local prevWeapon = prevFrame and prevFrame.weapon
                     if prevWeapon and prevWeapon[1] == weptbl[1] and weptbl[2] and prevWeapon[2] then
-                        -- A genuine reload always tops the clip back up to
-                        -- (at least) max capacity. Requiring just "clip went
-                        -- up at all" was wrong -- a harmless +1 blip (clip
-                        -- prediction/reconciliation noise between frames,
-                        -- not an actual reload) was enough to fire the full
-                        -- reload animation, which is why reloads appeared to
-                        -- trigger at random moments during killcam that
-                        -- didn't match anything the player actually did.
-                        local maxClip1 = wep:GetMaxClip1()
-                        if weptbl[2] > prevWeapon[2] and maxClip1 > 0 and weptbl[2] >= maxClip1 then
-                            print("[ReloadFix DEBUG] Detected reload during replay: " .. pl:Nick()
-                                .. " " .. weptbl[1] .. " clip " .. prevWeapon[2] .. " -> " .. weptbl[2]
-                                .. " (tick " .. tick .. ") -- firing SendWeaponAnim(ACT_VM_RELOAD)")
-                            wep:SendWeaponAnim(ACT_VM_RELOAD)
-                        elseif weptbl[2] < prevWeapon[2] then
+                        -- Forcing SendWeaponAnim(ACT_VM_RELOAD) whenever the
+                        -- recorded clip went up used to live here. Even after
+                        -- requiring the clip to reach max capacity (not just
+                        -- "went up"), it kept firing at moments that didn't
+                        -- match any real reload -- TFA Base's own clip
+                        -- reporting is apparently too noisy frame-to-frame
+                        -- for this kind of heuristic to be reliable.
+                        -- Disabled entirely: the actual ammo count still
+                        -- replays correctly via SetClip1/SetClip2 below
+                        -- regardless -- this only ever controlled whether the
+                        -- hands-reloading animation played on top of that.
+                        if weptbl[2] < prevWeapon[2] then
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
                             -- (the "buttons" data type replaying IN_ATTACK)
