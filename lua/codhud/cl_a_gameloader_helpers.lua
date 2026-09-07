@@ -356,3 +356,42 @@ InitiateCoDFonts()
 hook.Add("OnScreenSizeChanged", "CoDHUD_ReinitChallengeFonts", function()
     InitiateCoDFonts()
 end)
+
+-- Restored from the original mini_dm_gamemode addon this was forked from --
+-- bo2.lua's weaponinfo() (weapon name display) still calls this, and its
+-- absence here was throwing "attempt to call global 'CoDHUD_UpperText' (a
+-- nil value)" on every single frame, which aborted that HUD element
+-- mid-draw: everything after the crash point (weapon name, alt/clip ammo,
+-- low-ammo status text) never rendered, leaving only the reserve ammo
+-- number that had already drawn before the crash.
+local utf8_upper_map = {
+    -- Latin-1 Supplement
+    ["à"]="À",["á"]="Á",["â"]="Â",["ã"]="Ã",["ä"]="Ä",["å"]="Å",["æ"]="Æ",["ç"]="Ç",["è"]="È",["é"]="É",["ê"]="Ê",
+    ["ë"]="Ë",["ì"]="Ì",["í"]="Í",["î"]="Î",["ï"]="Ï",["ð"]="Ð",["ñ"]="Ñ",["ò"]="Ò",["ó"]="Ó",["ô"]="Ô",
+    ["õ"]="Õ", ["ö"]="Ö", ["ø"]="Ø", ["ù"]="Ù", ["ú"]="Ú", ["û"]="Û", ["ü"]="Ü", ["ý"]="Ý", ["þ"]="Þ", ["ß"]="SS",
+
+    -- Latin Extended-A (common EU letters)
+    ["ą"]="Ą",["ć"]="Ć",["ę"]="Ę",["ł"]="Ł",["ń"]="Ń",["ś"]="Ś",["ź"]="Ź",["ż"]="Ż",["č"]="Č",["ď"]="Ď",
+    ["ě"]="Ě",["ň"]="Ň",["ř"]="Ř",["š"]="Š",["ť"]="Ť",["ů"]="Ů",["ž"]="Ž",["ā"]="Ā",["ē"]="Ē",["ī"]="Ī",["ū"]="Ū",["ō"]="Ō",
+
+    -- Greek
+    ["α"]="Α",["β"]="Β",["γ"]="Γ",["δ"]="Δ",["ε"]="Ε",["ζ"]="Ζ",["η"]="Η",["θ"]="Θ",["ι"]="Ι",["κ"]="Κ",["λ"]="Λ",["μ"]="Μ",
+    ["ν"]="Ν",["ξ"]="Ξ",["ο"]="Ο",["π"]="Π",["ρ"]="Ρ",["σ"]="Σ",["ς"]="Σ",["τ"]="Τ",["υ"]="Υ",["φ"]="Φ",["χ"]="Χ",["ψ"]="Ψ",["ω"]="Ω",
+
+    -- Cyrillic
+    ["а"]="А",["б"]="Б",["в"]="В",["г"]="Г",["д"]="Д",["е"]="Е",["ё"]="Ё",["ж"]="Ж",["з"]="З",["и"]="И",["й"]="Й",["к"]="К",["л"]="Л",
+    ["м"]="М",["н"]="Н",["о"]="О",["п"]="П",["р"]="Р",["с"]="С",["т"]="Т",["у"]="У",["ф"]="Ф",["х"]="Х",["ц"]="Ц",["ч"]="Ч",["ш"]="Ш",["щ"]="Щ",
+    ["ъ"]="Ъ",["ы"]="Ы",["ь"]="Ь",["э"]="Э",["ю"]="Ю",["я"]="Я",
+}
+
+function CoDHUD_UpperText(str)
+    if not str then return "" end
+
+    -- First pass: ASCII upper (fast + handles A-Z)
+    str = string.upper(str)
+
+    -- UTF-8 pass
+    return (str:gsub("[%z\1-\127\194-\244][\128-\191]*", function(c)
+        return utf8_upper_map[c] or c
+    end))
+end
