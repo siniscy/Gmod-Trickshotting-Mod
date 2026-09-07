@@ -30,7 +30,16 @@ end
 
 function recObj:SetKill(npc)
     self:GetCurrentFrame().kill = npc:EntIndex()
-    self.SaveTimeout = CurTime() + 1
+    -- How long recording keeps running AFTER the kill before the buffer is
+    -- frozen for replay -- this is the hard ceiling on how much "after the
+    -- kill" footage killcam can ever show (the recorded buffer is a fixed
+    -- ~10s window total; whatever isn't spent after the kill is spent
+    -- rewound before it). 1s wasn't enough for a reload's animation/sound
+    -- to finish recording at all, so playback always ran out of buffer and
+    -- ended mid-reload -- which is what actually cut the killcam short,
+    -- not anything about round/match transitions. 3s comfortably covers a
+    -- normal reload.
+    self.SaveTimeout = CurTime() + 3
     self.KillSaved = false
 end
 
