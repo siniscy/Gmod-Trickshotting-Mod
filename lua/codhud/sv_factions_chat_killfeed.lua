@@ -436,6 +436,20 @@ local function CoDHUD_GetJoinFaction()
 end
 
 local function CoDHUD_AssignFaction(ply)
+    -- Sesh bots' faction is exclusively owned by sv_ffa_bots.lua (always the
+    -- opposing team from the human) -- same exclusion already applied to
+    -- every other generic faction-assignment path in this file. Without it,
+    -- "player_activate" (which DOES fire for player.CreateNextBot() bots,
+    -- not just real connecting clients) runs this on every fresh bot spawn
+    -- with no CoDHUD_StoredFaction set yet, and CoDHUD_GetJoinFaction()'s
+    -- generic pool-balancing pick can land a bot on the player's own
+    -- faction -- the rare "we're both on rangers" bug. It's almost always
+    -- invisible because SeshBot_FactionSync's Think hook (sv_ffa_bots.lua)
+    -- catches and corrects it within under a second, which is why the
+    -- console fills with "FactionSync correcting ... rangers -> ussr" --
+    -- but occasionally the scoreboard renders in that window before the
+    -- correction lands.
+    if IsValid(ply) and ply:IsBot() then return end
     if ply.CoDHUD_StoredFaction then return end
 
     local faction = CoDHUD_GetJoinFaction()
