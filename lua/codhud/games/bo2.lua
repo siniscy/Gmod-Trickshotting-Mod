@@ -216,7 +216,7 @@ CoDHUD.Gamemodes[hudtype].Boosts = {
 
 -- [[ HELPERS ]]
 local function DrawSqueezedScore(val, x, y, alpha)
-	local textCol   = Color(255, 255, 50, alpha)
+	local textCol   = Color(255, 255, 255, alpha)
 	local shadowCol = Color(0, 0, 0, alpha * 0.8)
 	local s_val     = tostring(val)
 	local partPlus  = "+"
