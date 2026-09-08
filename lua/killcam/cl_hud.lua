@@ -3,11 +3,13 @@ net.Receive("Killcam - Hitmarker", function()
     hitTime = CurTime() + 0.1
 end)
 
--- French/German/Italian use Poster Gothic ATF Medium for the killcam
--- title and timer; everything else keeps BankGothic Md BT.
+-- French/German/Italian/Spanish use Poster Gothic ATF Medium for the
+-- killcam title and timer; everything else keeps BankGothic Md BT.
+-- Note: Spanish (Spain)'s gmod_language code is "es-es", not "es" --
+-- matches resource/localization/es-es/.
 local function GetKillcamTitleFontFamily()
     local lang = GetConVar("gmod_language") and GetConVar("gmod_language"):GetString() or "en"
-    if lang == "fr" or lang == "de" or lang == "it" then
+    if lang == "fr" or lang == "de" or lang == "it" or lang == "es-es" then
         return "Poster Gothic ATF Medium"
     end
     return "BankGothic Md BT"
