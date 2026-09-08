@@ -381,7 +381,6 @@ RegisterData("weapon", {
                             -- value for a grace period so the animation
                             -- has time to actually play before the clip
                             -- visibly refills.
-                            recorder.KC_ReloadGraceUntil = CurTime() + 1.6
                             recorder.KC_ReloadHoldClip1  = prevWeapon[2]
                             recorder.KC_ReloadHoldClip2  = prevWeapon[3]
                             -- 7th attempt: SERVER-side ResetSequence
@@ -432,6 +431,23 @@ RegisterData("weapon", {
                                     " currentSeq=" .. tostring(vm:GetSequence()) ..
                                     " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
+                            -- The grace window used to be a flat, hardcoded
+                            -- 1.6s no matter how long the real reload
+                            -- animation actually is. A live test proved
+                            -- both diagnostics above never fired (nothing
+                            -- fought the sequence, and the replay never ran
+                            -- out of frames) yet the spectator still never
+                            -- saw the reload -- because 1.6s was too SHORT
+                            -- for this weapon's real reload (a bolt-action
+                            -- sniper), so the animation got forcibly cut off
+                            -- and snapped straight to "fire" partway through,
+                            -- before it ever looked like a reload at all.
+                            -- Use the sequence's own real duration instead,
+                            -- so it always plays out completely.
+                            recorder.KC_ReloadGraceUntil = CurTime() + (
+                                (recorder.KC_ReloadSeqDuration and recorder.KC_ReloadSeqDuration > 0)
+                                and recorder.KC_ReloadSeqDuration or 1.6
+                            )
                             recorder.KC_ReloadStartTime = CurTime()
                             -- 11th attempt (EXPERIMENTAL, user-approved):
                             -- the 10th attempt's per-tick re-assertion
