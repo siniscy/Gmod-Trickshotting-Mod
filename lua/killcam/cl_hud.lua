@@ -7,16 +7,16 @@ local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
-        font = "Bank Gothic GT",
+        font = "Bank Gothic",
         extended = false,
-        weight = 900,
+        weight = 700,
         shadow = false,
         antialias = true,
     })
     Scalar.RegisterFont("Killcam_HUD_Timer", 60, 12, {
-        font = "Bank Gothic GT",
+        font = "Conduit ITC",
         extended = false,
-        weight = 900,
+        weight = 700,
         shadow = false,
         antialias = true,
     })
