@@ -38,6 +38,39 @@ end
 -- entity, so it becomes part of that entity's normal networked baseline
 -- like any other server-driven animation change.
 
+-- CLIENT-side diagnostic for whoever is SPECTATING during killcam: prints
+-- whenever the sequence of the killer's viewmodel (as seen on THIS
+-- client) changes. Compared against the server's own
+-- "[KC Reload VM DEBUG]" print for the same moment, this tells us
+-- whether the server's ResetSequence call is even reaching the
+-- spectator's client at all (sequence number matches what the server
+-- set) or never arrives (sequence stays frozen on whatever it was) --
+-- a networking problem vs. a pure rendering problem are very different
+-- fixes.
+if CLIENT then
+    local lastSeq, lastVM
+    hook.Add("Think", "KC_ReloadVM_SpectatorWatch", function()
+        local lp = LocalPlayer()
+        if not IsValid(lp) then return end
+        local target = lp:GetObserverTarget()
+        if not IsValid(target) or not target:IsPlayer() or target == lp then
+            lastSeq, lastVM = nil, nil
+            return
+        end
+        local vm = target:GetViewModel()
+        if not IsValid(vm) then
+            lastSeq, lastVM = nil, nil
+            return
+        end
+        local seq = vm:GetSequence()
+        if vm ~= lastVM or seq ~= lastSeq then
+            lastVM, lastSeq = vm, seq
+            print("[KC Reload VM SPECTATOR] watching " .. target:Nick() .. "'s viewmodel " .. tostring(vm:GetModel()) ..
+                " -- sequence changed to " .. tostring(seq) .. " (" .. tostring(vm:GetSequenceName(seq)) .. ")")
+        end
+    end)
+end
+
 function Killcam.CollectData(pl, cmd, types)
     local tbl = {}
     if types then
