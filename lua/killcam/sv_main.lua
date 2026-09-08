@@ -76,9 +76,6 @@ hook.Add("Initialize", "Killcam - Concommands", function()
     concommand.Add("kc_stop", Killcam.StopPlaying)
 end)
 
-concommand.Add("kc_play", Killcam.StartPlaying)
-concommand.Add("kc_stop", Killcam.StopPlaying)
-
 net.Receive("Killcam - Frames", function(_, pl)
     pl.KC_Ready = true
 end)
