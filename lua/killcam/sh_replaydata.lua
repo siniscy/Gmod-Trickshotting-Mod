@@ -19,35 +19,24 @@ local function RegisterData(name, tbl)
     end
 end
 
--- 6th attempt at the killer's-reload-invisible-to-spectator problem.
--- Four different server-side approaches (weapon SendWeaponAnim, viewmodel
--- SendWeaponAnim [crashed -- not a valid method there], wep:Reload())
--- either never reached an OBS_MODE_IN_EYE spectator's screen at all, or
--- (per the killer's own reload working every time) only ever affected the
--- reloading player's OWN client -- almost certainly via their own TFA
--- Base client prediction reacting to the replayed IN_RELOAD button press,
--- which a third-party spectator can never benefit from no matter what we
--- force server-side. Stop trying to make the ENTITY network correctly to
--- spectators and instead force the visual directly, locally, on whoever
--- is NOT the reloading player -- something fully within our own control.
-if SERVER then
-    util.AddNetworkString("KC_ForceReloadVisual")
-end
-
-if CLIENT then
-    net.Receive("KC_ForceReloadVisual", function()
-        local reloader = net.ReadEntity()
-        if not IsValid(reloader) or reloader == LocalPlayer() then return end
-        local vm = reloader:GetViewModel()
-        if not IsValid(vm) then return end
-        local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
-        if seq and seq >= 0 then
-            vm:ResetSequence(seq)
-            vm:SetCycle(0)
-            vm:SetPlaybackRate(1)
-        end
-    end)
-end
+-- 7th attempt at the killer's-reload-invisible-to-spectator problem.
+-- cl_killcam_hands.lua's own history (a separate, earlier fix for hands
+-- not appearing on a spectated player's viewmodel) recorded something
+-- critical: PreDrawViewModel/PostDrawViewModel hooks were CONFIRMED via
+-- live testing to never fire at all for a spectated (non-local) player's
+-- viewmodel. That means an OBS_MODE_IN_EYE spectator's rendering of
+-- someone else's viewmodel bypasses the normal Lua hook pipeline
+-- entirely -- it's driven by the raw entity's NETWORKED sequence/cycle,
+-- computed server-side, not anything a client-side Lua call can
+-- influence for a third party. That explains every previous attempt:
+-- SendWeaponAnim on the WEAPON entity (not the viewmodel) never touched
+-- what's actually networked for the viewmodel's pose; a CLIENT-side
+-- ResetSequence on the viewmodel (6th attempt) was the right entity but
+-- the wrong realm -- purely local/cosmetic, never networked to anyone.
+-- This is the first attempt at the right entity AND the right realm:
+-- SERVER-side ResetSequence directly on the killer's actual viewmodel
+-- entity, so it becomes part of that entity's normal networked baseline
+-- like any other server-driven animation change.
 
 function Killcam.CollectData(pl, cmd, types)
     local tbl = {}
@@ -327,13 +316,22 @@ RegisterData("weapon", {
                             if isfunction(wep.Reload) then
                                 wep:Reload()
                             end
-                            -- 6th attempt: force the reload visual locally
-                            -- on whoever is NOT pl (see KC_ForceReloadVisual
-                            -- above) instead of hoping the entity networks
-                            -- correctly to an OBS_MODE_IN_EYE spectator.
-                            net.Start("KC_ForceReloadVisual")
-                                net.WriteEntity(pl)
-                            net.Broadcast()
+                            -- 7th attempt: SERVER-side ResetSequence
+                            -- directly on the killer's actual viewmodel
+                            -- entity (see the top-of-file comment) --
+                            -- becomes part of that entity's normal
+                            -- networked baseline, which is what an
+                            -- OBS_MODE_IN_EYE spectator's viewmodel
+                            -- rendering actually reads from.
+                            local vm = pl:GetViewModel()
+                            if IsValid(vm) then
+                                local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
+                                if seq and seq >= 0 then
+                                    vm:ResetSequence(seq)
+                                    vm:SetCycle(0)
+                                    vm:SetPlaybackRate(1)
+                                end
+                            end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         if weptbl[2] < prevWeapon[2] then
