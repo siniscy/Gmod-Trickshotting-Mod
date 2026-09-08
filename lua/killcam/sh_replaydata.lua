@@ -281,13 +281,20 @@ RegisterData("weapon", {
                         -- attempting a 3rd heuristic.
                         local maxClip = wep:GetMaxClip1()
                         local lastAnim = recorder.KC_LastReloadAnimTime or 0
-                        if weptbl[2] > prevWeapon[2]
-                            and maxClip and maxClip > 0
-                            and weptbl[2] >= maxClip
-                            and prevWeapon[2] < maxClip
-                            and CurTime() - lastAnim > 0.3 then
-                            recorder.KC_LastReloadAnimTime = CurTime()
-                            wep:SendWeaponAnim(ACT_VM_RELOAD)
+                        if weptbl[2] > prevWeapon[2] then
+                            if maxClip and maxClip > 0
+                                and weptbl[2] >= maxClip
+                                and prevWeapon[2] < maxClip
+                                and CurTime() - lastAnim > 0.3 then
+                                recorder.KC_LastReloadAnimTime = CurTime()
+                                wep:SendWeaponAnim(ACT_VM_RELOAD)
+                                print("[KC Reload] FIRED for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
+                                    " clip " .. tostring(prevWeapon[2]) .. "->" .. tostring(weptbl[2]) .. "/" .. tostring(maxClip))
+                            else
+                                print("[KC Reload] skipped clip increase for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
+                                    " clip " .. tostring(prevWeapon[2]) .. "->" .. tostring(weptbl[2]) .. " maxClip=" .. tostring(maxClip) ..
+                                    " cooldownLeft=" .. tostring(0.3 - (CurTime() - lastAnim)))
+                            end
                         end
                         if weptbl[2] < prevWeapon[2] then
                             -- A shot was fired at this point in the original
