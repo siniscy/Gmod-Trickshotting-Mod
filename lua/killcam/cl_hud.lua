@@ -9,14 +9,14 @@ local function InitSizes()
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
         font = "Bank Gothic GT",
         extended = false,
-        weight = 500,
+        weight = 900,
         shadow = false,
         antialias = true,
     })
     Scalar.RegisterFont("Killcam_HUD_Timer", 60, 12, {
         font = "Bank Gothic GT",
         extended = false,
-        weight = 500,
+        weight = 900,
         shadow = false,
         antialias = true,
     })
