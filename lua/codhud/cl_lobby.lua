@@ -291,6 +291,13 @@ local function OpenLobby()
     frame.Paint = function(self, sw, sh)
         PaintAbstractBackground(sw, sh)
         draw.SimpleText("PRIVATE MATCH", "DermaLarge", 60, 50, COL_TITLE, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        -- Killcam preview lives on the 2D HUDPaint layer, which always
+        -- renders BELOW any open VGUI panel -- this full-screen lobby frame
+        -- was blocking it out completely. Paint it here instead, after our
+        -- own background but before the sidebar/roster/mapbox child panels
+        -- (which paint on top of us automatically), so players can still
+        -- see their card/title/icon preview while the lobby is open.
+        if KC_DrawKillcamPreviewOverlay then KC_DrawKillcamPreviewOverlay() end
     end
     KC_Lobby_Frame = frame
 

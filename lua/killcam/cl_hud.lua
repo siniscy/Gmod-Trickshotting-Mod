@@ -321,55 +321,69 @@ hook.Add("HUDShouldDraw", "Killcam - Disable other HUDs", function(name)
     end
 end)
 
+local function DrawKillcamOverlay()
+    draw.NoTexture()
+    surface.SetDrawColor(bars_color)
+    surface.DrawRect(0, 0, ScrW(), ScrH()*0.1)
+    surface.DrawRect(0, ScrH()*0.86 + 1, ScrW(), ScrH()*0.14)
+
+    if KC_Playing() then
+        if getTitle() ~= title_lv then
+            title_lv = getTitle()
+            mat_title = LoadAnimated("killcam/titles/", title_lv)
+        end
+        if getIcon() ~= icon_lv then
+            icon_lv = getIcon()
+            mat_icon = LoadAnimated("killcam/icons/", icon_lv)
+        end
+        if getLvlIcon() ~= lvl_lv then
+            lvl_lv = getLvlIcon()
+            mat_lvl = LoadAnimated("killcam/ranks/", lvl_lv)
+        end
+
+        DrawPlayerCard((ScrW() - UI_SCALE_KCHUD) * 0.5, ScrH() * 0.835, UI_SCALE_KCHUD, mat_title, mat_icon, mat_lvl, getTitleText(), getClanTag(), getNick(), getLvl())
+
+        -- Draw CoD4 crosshair during killcam.
+        if CoD4Crosshair_Draw then
+            CoD4Crosshair_Draw(true)
+        end
+    else
+        DrawPlayerCard((ScrW() - UI_SCALE_KCHUD) * 0.5, ScrH() * 0.835, UI_SCALE_KCHUD, mat_title_preview, mat_icon_preview, mat_lvl_preview, cvar_text:GetString(), cvar_clantag:GetString(), LocalPlayer():Nick(), cvar_lvl:GetString())
+    end
+
+    surface.SetDrawColor(color_white)
+
+    --// Top bar text
+    draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+
+    --// Hitmarker
+    if CurTime() < hitTime then
+        surface.SetDrawColor(color_white)
+        surface.SetMaterial(mat_hitmarker)
+        surface.DrawTexturedRect(ScrW() * 0.5 - ScrH() * 0.025, ScrH() * 0.5 - ScrH() * 0.025, ScrH() * 0.05, ScrH() * 0.05)
+    end
+end
+
+-- Exposed so other VGUI panels (e.g. the pre-game lobby, cl_lobby.lua) can
+-- paint this same preview into their own Paint() -- a plain HUDPaint hook
+-- can't reach them because VGUI panels always render on top of HUDPaint,
+-- so a full-screen frame like the lobby otherwise blocks this out entirely.
+function KC_DrawKillcamPreviewOverlay()
+    if not sizeInitialized then
+        InitSizes()
+    end
+    DrawKillcamOverlay()
+end
+
 hook.Add("HUDPaint", "aaaKillcamHUD", function()
     if not sizeInitialized then
         InitSizes()
     end
     if KC_Playing() or Killcam.menuOpened then
-        draw.NoTexture()
-        surface.SetDrawColor(bars_color)
-        surface.DrawRect(0, 0, ScrW(), ScrH()*0.1)
-        surface.DrawRect(0, ScrH()*0.86 + 1, ScrW(), ScrH()*0.14)
-
-        if KC_Playing() then
-            if getTitle() ~= title_lv then
-                title_lv = getTitle()
-                mat_title = LoadAnimated("killcam/titles/", title_lv)
-            end
-            if getIcon() ~= icon_lv then
-                icon_lv = getIcon()
-                mat_icon = LoadAnimated("killcam/icons/", icon_lv)
-            end
-            if getLvlIcon() ~= lvl_lv then
-                lvl_lv = getLvlIcon()
-                mat_lvl = LoadAnimated("killcam/ranks/", lvl_lv)
-            end
-
-            DrawPlayerCard((ScrW() - UI_SCALE_KCHUD) * 0.5, ScrH() * 0.835, UI_SCALE_KCHUD, mat_title, mat_icon, mat_lvl, getTitleText(), getClanTag(), getNick(), getLvl())
-
-            -- Draw CoD4 crosshair during killcam.
-            if CoD4Crosshair_Draw then
-                CoD4Crosshair_Draw(true)
-            end
-        else
-            DrawPlayerCard((ScrW() - UI_SCALE_KCHUD) * 0.5, ScrH() * 0.835, UI_SCALE_KCHUD, mat_title_preview, mat_icon_preview, mat_lvl_preview, cvar_text:GetString(), cvar_clantag:GetString(), LocalPlayer():Nick(), cvar_lvl:GetString())
-        end
-
-        surface.SetDrawColor(color_white)
-
-        --// Top bar text
-        draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-        draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-        draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-        draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-
-        --// Hitmarker
-        if CurTime() < hitTime then
-            surface.SetDrawColor(color_white)
-            surface.SetMaterial(mat_hitmarker)
-            surface.DrawTexturedRect(ScrW() * 0.5 - ScrH() * 0.025, ScrH() * 0.5 - ScrH() * 0.025, ScrH() * 0.05, ScrH() * 0.05)
-        end
-
+        DrawKillcamOverlay()
         return false
     end
 end)
