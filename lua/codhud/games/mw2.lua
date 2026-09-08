@@ -1283,8 +1283,22 @@ local function scoreboard( ... )
 
 	local factions = {}
 	for _, p in ipairs(player.GetAll()) do
-		local fac = p:GetNW2String("CoDHUD_Faction", "rangers")
-		if fac == "" then fac = "rangers" end
+		-- "rangers" was being used as the fallback for ANY player whose
+		-- faction hasn't networked to this client yet (a brief window right
+		-- after a bot spawns) -- since "rangers" also happens to be the
+		-- default human faction, that visually merged a not-yet-synced bot
+		-- into the player's own team on the scoreboard. Only guess for the
+		-- local player (so you always see yourself immediately); for anyone
+		-- else, skip them this frame rather than guess wrong -- their real
+		-- faction shows up correctly within a tick or two.
+		local fac = p:GetNW2String("CoDHUD_Faction", "")
+		if fac == "" then
+			if p == lp then
+				fac = cookie.GetString("CoDHUD_SelectedFaction", "rangers")
+			else
+				continue
+			end
+		end
 		factions[fac] = factions[fac] or {}
 		table.insert(factions[fac], p)
 	end
