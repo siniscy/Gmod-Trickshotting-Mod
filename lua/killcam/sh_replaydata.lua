@@ -484,7 +484,26 @@ RegisterData("weapon", {
                         end
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
                         local inReloadGrace = recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil
-                        if weptbl[2] < prevWeapon[2] and isAttacking and not inReloadGrace then
+                        -- Noisy Clip1() recording (the same source noise
+                        -- that made reload fire 3x for 2 real reloads --
+                        -- see above) also double-counts shots: a bounce
+                        -- like 4->5->4 recorded across consecutive ticks
+                        -- reads as TWO decreases for one real trigger
+                        -- pull, firing DoAttackEvent()/ForceGunSoundAuto
+                        -- twice and visibly "double firing" for the
+                        -- spectator. Track the lowest clip value we've
+                        -- already fired for and require a genuinely NEW,
+                        -- lower value before firing again -- a bounce back
+                        -- up to the old value then down again no longer
+                        -- re-triggers. Reset the tracker whenever the clip
+                        -- goes back up (a real reload finishing), so the
+                        -- next real shot after a reload still counts.
+                        if weptbl[2] > prevWeapon[2] then
+                            recorder.KC_LastFiredClip = nil
+                        end
+                        if weptbl[2] < prevWeapon[2] and isAttacking and not inReloadGrace
+                            and (not recorder.KC_LastFiredClip or weptbl[2] < recorder.KC_LastFiredClip) then
+                            recorder.KC_LastFiredClip = weptbl[2]
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
                             -- (the "buttons" data type replaying IN_ATTACK)
@@ -521,11 +540,20 @@ RegisterData("weapon", {
                             -- burst, so this isn't a rising-edge check),
                             -- but a clip blip with no attack input behind
                             -- it can no longer fire this.
+                            -- The kill frame gets its OWN unconditional
+                            -- DoAttackEvent()+ForceGunSoundAuto() call from
+                            -- the "shot" data type below (runs every kill,
+                            -- no inReloadGrace guard). This comment already
+                            -- said to skip both here on the kill frame, but
+                            -- the code only ever skipped DoAttackEvent() --
+                            -- ForceGunSoundAuto() ran unconditionally right
+                            -- after, so every kill played the gunshot sound
+                            -- twice. Skip both together.
                             local frame = recorder:GetFrame(tick)
                             if not (frame and frame.kill) then
                                 pl:DoAttackEvent()
+                                ForceGunSoundAuto(wep)
                             end
-                            ForceGunSoundAuto(wep)
                         end
                     end
                 end
