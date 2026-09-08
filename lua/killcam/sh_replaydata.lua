@@ -268,16 +268,24 @@ RegisterData("weapon", {
                         -- pickup or a noisy intermediate reading), and a
                         -- per-recorder cooldown so one real reload's own
                         -- jitter can't retrigger the animation multiple
-                        -- times. If this still misfires, revert this block
-                        -- back to plain SetClip1/SetClip2 with no animation
-                        -- rather than attempting a 3rd heuristic.
+                        -- times. NOTE: 1.5s was too long -- a player who
+                        -- reloaded more than once in the recorded window
+                        -- (small clip, panic reloads, etc.) only got the
+                        -- LAST reload's animation, the earlier ones got
+                        -- suppressed by this same cooldown. Short cooldown
+                        -- now only guards against the same reload
+                        -- re-triggering within a couple of frames, not
+                        -- against two genuinely separate reloads. If this
+                        -- still misfires, revert this block back to plain
+                        -- SetClip1/SetClip2 with no animation rather than
+                        -- attempting a 3rd heuristic.
                         local maxClip = wep:GetMaxClip1()
                         local lastAnim = recorder.KC_LastReloadAnimTime or 0
                         if weptbl[2] > prevWeapon[2]
                             and maxClip and maxClip > 0
                             and weptbl[2] >= maxClip
                             and prevWeapon[2] < maxClip
-                            and CurTime() - lastAnim > 1.5 then
+                            and CurTime() - lastAnim > 0.3 then
                             recorder.KC_LastReloadAnimTime = CurTime()
                             wep:SendWeaponAnim(ACT_VM_RELOAD)
                         end
