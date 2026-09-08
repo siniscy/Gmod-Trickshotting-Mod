@@ -24,7 +24,20 @@ function Killcam.CopyTable(tbl)
 end
 
 function KC_Playing()
-    return GetGlobalBool("Killcam_Playing")
+    if GetGlobalBool("Killcam_Playing") then return true end
+    -- Fallback: Killcam_Playing (a networked global) has been observed
+    -- to consistently fail to reach a real remote client's killer-side
+    -- connection on some rounds (confirmed via a raw diagnostic showing
+    -- it never flipped true on that client for that round, even though
+    -- it stayed true for 15+ seconds on the server/host) -- stuck
+    -- greyscale + no killcam UI is the visible result. _G.KC_ClientReplaying
+    -- (cl_npcreplay.lua) is a SEPARATE, independently-set flag that goes
+    -- true the instant "Killcam - NPC Frames" arrives -- a message that,
+    -- per the same logs, reliably arrives every round for the killer
+    -- even when Killcam_Playing itself doesn't. Only ever true on
+    -- CLIENT (nil on server), so this is safe to check unconditionally.
+    if _G.KC_ClientReplaying then return true end
+    return false
 end
 
 function KC_ServerTick()
