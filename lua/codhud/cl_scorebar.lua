@@ -160,6 +160,31 @@ local function GetScorebarData()
 		data.enemyFaction = enemyFactionData and enemyFactionData.faction or nil
 	end
 
+	-- Diagnostic for a reported non-host-only S&D scorebar fill bug --
+	-- print the raw inputs feeding the bar fill whenever any of them
+	-- change, so a mismatch between what two clients compute can be
+	-- compared directly instead of guessing from a single screenshot.
+	if IsSD() then
+		local cv_rounds = GetConVar("sesh_sd_rounds")
+		local sig = table.concat({
+			tostring(myFaction), tostring(data.enemyFaction),
+			tostring(KC_SD_SeshRoundsA), tostring(KC_SD_SeshRoundsB),
+			tostring(data.clientScore), tostring(data.enemyScore),
+			tostring(cv_rounds and cv_rounds:GetInt()),
+		}, "|")
+		if sig ~= CoDHUD_SDBarLastSig then
+			CoDHUD_SDBarLastSig = sig
+			print("[SD Bar RAW] myFaction=" .. tostring(myFaction) ..
+				" enemyFaction=" .. tostring(data.enemyFaction) ..
+				" SeshRoundsA=" .. tostring(KC_SD_SeshRoundsA) ..
+				" SeshRoundsB=" .. tostring(KC_SD_SeshRoundsB) ..
+				" clientScore=" .. tostring(data.clientScore) ..
+				" enemyScore=" .. tostring(data.enemyScore) ..
+				" sesh_sd_rounds=" .. tostring(cv_rounds and cv_rounds:GetInt()) ..
+				" on " .. (IsValid(ply) and ply:Nick() or "?"))
+		end
+	end
+
     -- STATUS
     local COL_WINNING = Color(110, 220, 120, 255)
     local COL_LOSING  = Color(215, 110, 120, 255)
