@@ -276,25 +276,26 @@ RegisterData("weapon", {
                         local wasReloading = prevButtons and bit.band(prevButtons, IN_RELOAD) ~= 0
                         local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
                         if isReloading and not wasReloading then
-                            wep:SendWeaponAnim(ACT_VM_RELOAD)
-                            -- The weapon entity's animation is what the
-                            -- KILLER's own client actually shows (their
-                            -- reload was already visible without this --
-                            -- likely driven by their own TFA Base
-                            -- prediction reacting to the replayed
-                            -- IN_RELOAD button press via the "buttons"
-                            -- data type, not this call at all). A
-                            -- spectator watching via OBS_MODE_IN_EYE
-                            -- renders the KILLER'S VIEWMODEL specifically
-                            -- (a separate entity from the weapon), which
-                            -- SendWeaponAnim on the weapon alone doesn't
-                            -- reliably drive -- confirmed FIRING correctly
-                            -- server-side every time, yet still invisible
-                            -- to the spectator. Also force it directly on
-                            -- the viewmodel entity itself.
-                            local vm = pl:GetViewModel()
-                            if IsValid(vm) then
-                                vm:SendWeaponAnim(ACT_VM_RELOAD)
+                            -- 4th attempt: SendWeaponAnim(ACT_VM_RELOAD) on
+                            -- the weapon confirmed FIRING every time
+                            -- (server-side log proof), yet a spectator
+                            -- watching via OBS_MODE_IN_EYE still never saw
+                            -- it -- only the killer did (almost certainly
+                            -- via their OWN TFA Base client prediction
+                            -- reacting to the replayed IN_RELOAD button
+                            -- press, unrelated to this call, and useless to
+                            -- a third-party spectator). Trying
+                            -- SendWeaponAnim directly on the viewmodel
+                            -- entity CRASHED outright -- SendWeaponAnim
+                            -- isn't a valid method there, it's weapon-only.
+                            -- Call the weapon's own Reload() instead --
+                            -- the actual function the engine calls when a
+                            -- real player presses R, which handles
+                            -- whatever sound/animation/state TFA Base
+                            -- needs internally, rather than us guessing at
+                            -- which low-level call replicates correctly.
+                            if isfunction(wep.Reload) then
+                                wep:Reload()
                             end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
