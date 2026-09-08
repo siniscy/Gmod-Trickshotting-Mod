@@ -419,6 +419,29 @@ RegisterData("weapon", {
                                     " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
                             recorder.KC_ReloadStartTime = CurTime()
+                            -- 11th attempt (EXPERIMENTAL, user-approved):
+                            -- the 10th attempt's per-tick re-assertion
+                            -- still lost the fight -- the sequence kept
+                            -- alternating reload/fire every tick in the
+                            -- log, meaning TFA Base's own Think() is
+                            -- ALSO reasserting its own idea of "the
+                            -- correct sequence" every tick, and whichever
+                            -- of us the engine happens to run last within
+                            -- a given tick wins that tick. Rather than
+                            -- keep racing it, remove it from the race
+                            -- entirely: suppress the weapon's own Think()
+                            -- for the whole grace window (restored once it
+                            -- ends, see below) so there's nothing left to
+                            -- fight over the sequence. Risk: Think() may
+                            -- also handle other passive weapon logic
+                            -- (recoil recovery, etc.) that will briefly
+                            -- pause during this window -- acceptable for
+                            -- a ~1.6s killcam replay window.
+                            if isfunction(wep.Think) and not recorder.KC_ReloadOrigThink then
+                                recorder.KC_ReloadOrigThink = wep.Think
+                                recorder.KC_ReloadThinkWep  = wep
+                                wep.Think = function() end
+                            end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         -- Keep re-forcing the reload sequence EVERY TICK
@@ -438,6 +461,12 @@ RegisterData("weapon", {
                                 vmForce:SetCycle(cyc)
                                 vmForce:SetPlaybackRate(1)
                             end
+                        elseif recorder.KC_ReloadOrigThink and IsValid(recorder.KC_ReloadThinkWep) then
+                            -- Grace window ended -- restore the weapon's
+                            -- real Think() so normal weapon logic resumes.
+                            recorder.KC_ReloadThinkWep.Think = recorder.KC_ReloadOrigThink
+                            recorder.KC_ReloadOrigThink = nil
+                            recorder.KC_ReloadThinkWep  = nil
                         end
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
                         local inReloadGrace = recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil
