@@ -340,15 +340,29 @@ RegisterData("weapon", {
                             -- SendWeaponAnim directly on the viewmodel
                             -- entity CRASHED outright -- SendWeaponAnim
                             -- isn't a valid method there, it's weapon-only.
-                            -- Call the weapon's own Reload() instead --
-                            -- the actual function the engine calls when a
-                            -- real player presses R, which handles
-                            -- whatever sound/animation/state TFA Base
-                            -- needs internally, rather than us guessing at
-                            -- which low-level call replicates correctly.
-                            if isfunction(wep.Reload) then
-                                wep:Reload()
-                            end
+                            --
+                            -- 12th attempt: 5th attempt called the weapon's
+                            -- own Reload() here, on the theory that it
+                            -- would handle whatever sound/animation/state
+                            -- TFA Base needs internally. That call is almost
+                            -- certainly what caused the 11th attempt's
+                            -- symptom to REVERSE instead of resolve: the
+                            -- pre-kill reload (which had several seconds to
+                            -- breathe before the kill) lost the sequence
+                            -- fight again, while the kill reload (killcam
+                            -- ended almost immediately after) didn't --
+                            -- exactly the pattern you'd see if Reload()
+                            -- schedules TFA Base's own internal reload
+                            -- completion on a timer (independent of
+                            -- Think(), so suppressing Think() above never
+                            -- touched it) that fires a couple seconds
+                            -- later and stomps the sequence/clip once the
+                            -- REAL reload "finishes" server-side. We
+                            -- already manually drive the sequence, cycle,
+                            -- and clip ourselves below for the whole grace
+                            -- window -- TFA Base's own reload lifecycle
+                            -- was never actually needed and is now removed
+                            -- entirely so there's nothing left to fire late.
                             -- 8th attempt: the recorded clip can read as
                             -- already full on the SAME tick IN_RELOAD is
                             -- first pressed (recording granularity --
