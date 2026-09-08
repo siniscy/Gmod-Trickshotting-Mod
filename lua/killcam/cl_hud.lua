@@ -53,7 +53,9 @@ local function InitSizes()
     -- element in this addon (cl_a_gameloader_helpers.lua) and the font
     -- Black Ops 2's real HUD actually uses. resource/fonts/AgencyFB-Bold.ttf
     -- registers as family "AgencyFB" (confirmed, no space).
-    Scalar.RegisterFont("Killcam_HUD_BO2", 72, 12, {
+    -- +8 over Killcam_HUD's 72 (roughly "2 sizes" bigger, per request) --
+    -- adjust further if it's not the right amount.
+    Scalar.RegisterFont("Killcam_HUD_BO2", 80, 12, {
         font = "AgencyFB",
         weight = 700,
         shadow = false,
@@ -387,23 +389,24 @@ local function DrawPlayerCardBO2(x, y, w, mat_title, mat_icon, mat_lvl, str_titl
     -- so it never bleeds up into the visible gameplay footage above it --
     -- MW2 gets away with floating above that line because its striped
     -- bg_ backing visually covers the gap; BO2 has nothing behind it.
-    local titleX, titleY = x, math.max(y, ScrH() * 0.86)
+    local titleX, titleY = x, math.max(y, ScrH() * 0.86) + 6
 
     surface.SetDrawColor(color_white)
 --// Title image (supports GIF animation)
     MatDraw(mat_title, titleX, titleY, titleW, titleH)
 
---// Emblem -- to the left of the name
+--// Emblem -- to the left of the name, vertically centered on the title
     local emblemSize = titleH * 0.5
-    local emblemX, emblemY = titleX + titleW * 0.02, titleY + titleH * 0.08
+    local emblemX, emblemY = titleX + titleW * 0.02, titleY + titleH * 0.5 - emblemSize * 0.5
     MatDraw(mat_icon, emblemX, emblemY, emblemSize, emblemSize)
 
 --// Name (white, AgencyFB) -- top of the title, right of the emblem
     local nameX, nameY = emblemX + emblemSize + titleW * 0.02, titleY + titleH * 0.06
     draw.SimpleTextOutlined(str_nick, "Killcam_Name_BO2", nameX, nameY, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 3, Color(0,0,0))
 
---// Clantag -- directly beneath the name
-    draw.SimpleTextOutlined(str_clantag, "Killcam_Title_BO2", nameX, titleY + titleH * 0.42, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 3, Color(0,0,0))
+--// Clantag -- beneath the name, with extra clearance so it doesn't
+    -- overlap the name's own rendered height
+    draw.SimpleTextOutlined(str_clantag, "Killcam_Title_BO2", nameX, titleY + titleH * 0.52, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 3, Color(0,0,0))
 
 --// Prestige icon -- lower than the name, centered horizontally
     local lvlIconSize = titleH * 0.4
