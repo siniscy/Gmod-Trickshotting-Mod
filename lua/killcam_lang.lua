@@ -25,9 +25,9 @@ local hud_toptext_translations = {
     ["th"]    = "การฆ่าที่ชนะรอบ",
 }
 
--- Translations for "GAME WINNING KILL" (TDM/FFA final kill)
+-- Translations for "FINAL KILLCAM" (TDM/FFA final kill)
 local hud_gamewinning_translations = {
-    ["en"]    = "GAME WINNING KILL",
+    ["en"]    = "FINAL KILLCAM",
     ["de"]    = "SPIELENTSCHEIDENDER KILL",
     ["fr"]    = "ÉLIMINATION GAGNANTE",
     ["es"]    = "ELIMINACIÓN GANADORA DEL JUEGO",

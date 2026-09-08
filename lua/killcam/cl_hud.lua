@@ -7,7 +7,7 @@ local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
-        font = "Bank Gothic",
+        font = "Bank Gothic Medium",
         extended = false,
         weight = 500,
         shadow = false,
