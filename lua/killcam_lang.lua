@@ -10,8 +10,12 @@ local hud_toptext_translations = {
     ["pl"]    = "ZABÓJSTWO RUNDOWE",
     ["nl"]    = "RONDE WINNENDE KILL",
     ["tr"]    = "TURU KAZANDIRAN KILL",
-    ["zh-CN"] = "制胜击杀",
-    ["zh-TW"] = "致勝擊殺",
+    -- GMod's actual language codes are lowercase ("zh-cn"/"zh-tw", matching
+    -- how es-es/sv-se are written) -- "zh-CN"/"zh-TW" never matched, so
+    -- Chinese always silently fell back to the English string, same class
+    -- of bug found and fixed for Spanish above.
+    ["zh-cn"] = "决胜击",
+    ["zh-tw"] = "致勝擊殺",
     ["ja"]    = "ラウンド勝利キル",
     ["ko"]    = "라운드 결정타",
     ["fi"]    = "KIERROKSEN RATKAISEVA TAPPO",
@@ -37,8 +41,8 @@ local hud_gamewinning_translations = {
     ["pl"]    = "ZABÓJSTWO WYGRYWAJĄCE GRĘ",
     ["nl"]    = "SPEL WINNENDE KILL",
     ["tr"]    = "OYUN KAZANDIRAN KILL",
-    ["zh-CN"] = "游戏制胜击杀",
-    ["zh-TW"] = "遊戲致勝擊殺",
+    ["zh-cn"] = "决胜击",
+    ["zh-tw"] = "遊戲致勝擊殺",
     ["ja"]    = "ゲーム勝利キル",
     ["ko"]    = "게임 결정타",
     ["fi"]    = "PELIN RATKAISEVA TAPPO",

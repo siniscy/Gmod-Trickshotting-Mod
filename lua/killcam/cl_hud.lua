@@ -15,6 +15,16 @@ local function GetKillcamTitleFontFamily()
     return "BankGothic Md BT"
 end
 
+-- Neither font above has CJK glyphs, so Chinese text was falling back to a
+-- mismatched system font mid-string ("mixing fonts"). GMod's FontData needs
+-- "extended" set to actually allow that fallback to draw a consistent set
+-- of glyphs instead of partially-missing ones. GMod's Chinese codes are
+-- "zh-cn"/"zh-tw" (lowercase, matching es-es/sv-se's convention).
+local function IsKillcamLangCJK()
+    local lang = GetConVar("gmod_language") and GetConVar("gmod_language"):GetString() or "en"
+    return lang == "zh-cn" or lang == "zh-tw"
+end
+
 local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
@@ -23,16 +33,17 @@ local function InitSizes()
     -- Medium), the same name already used successfully elsewhere in this
     -- addon (e.g. MW2_Score_Main in cl_a_gameloader_helpers.lua).
     local killcamTitleFont = GetKillcamTitleFontFamily()
+    local killcamTitleExtended = IsKillcamLangCJK()
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
         font = killcamTitleFont,
-        extended = false,
+        extended = killcamTitleExtended,
         weight = 500,
         shadow = false,
         antialias = true,
     })
     Scalar.RegisterFont("Killcam_HUD_Timer", 60, 12, {
         font = killcamTitleFont,
-        extended = false,
+        extended = killcamTitleExtended,
         weight = 500,
         shadow = false,
         antialias = true,
