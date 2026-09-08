@@ -384,6 +384,23 @@ RegisterData("weapon", {
                                     vm:ResetSequence(seq)
                                     vm:SetCycle(0)
                                     vm:SetPlaybackRate(1)
+                                    -- 10th attempt: a ONE-TIME ResetSequence
+                                    -- call wasn't enough -- confirmed the
+                                    -- sequence still flips to "fire" right
+                                    -- after even with shot-detection fully
+                                    -- blocked during this same window (9th
+                                    -- attempt), proving something OTHER
+                                    -- than our own DoAttackEvent() call was
+                                    -- reverting it -- almost certainly TFA
+                                    -- Base's own per-tick weapon logic
+                                    -- recalculating "the correct sequence"
+                                    -- from internal state we never set.
+                                    -- Remember the target sequence so the
+                                    -- clip-hold block below can keep
+                                    -- RE-FORCING it every tick for the
+                                    -- whole grace window instead of once.
+                                    recorder.KC_ReloadVMSeq       = seq
+                                    recorder.KC_ReloadSeqDuration = vm:SequenceDuration(seq)
                                 end
                                 -- DIAGNOSTIC: if this weapon's viewmodel
                                 -- model never had a sequence tagged with
@@ -401,7 +418,26 @@ RegisterData("weapon", {
                                     " currentSeq=" .. tostring(vm:GetSequence()) ..
                                     " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
+                            recorder.KC_ReloadStartTime = CurTime()
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
+                        end
+                        -- Keep re-forcing the reload sequence EVERY TICK
+                        -- for the whole grace window, not just once at the
+                        -- trigger tick -- whatever is reverting it (see
+                        -- above) runs every tick too, so a single
+                        -- assertion loses that race almost immediately.
+                        if recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil and recorder.KC_ReloadVMSeq then
+                            local vmForce = pl:GetViewModel()
+                            if IsValid(vmForce) then
+                                local dur = recorder.KC_ReloadSeqDuration
+                                local elapsed = CurTime() - (recorder.KC_ReloadStartTime or CurTime())
+                                local cyc = (dur and dur > 0) and math.Clamp(elapsed / dur, 0, 1) or 0
+                                if vmForce:GetSequence() ~= recorder.KC_ReloadVMSeq then
+                                    vmForce:ResetSequence(recorder.KC_ReloadVMSeq)
+                                end
+                                vmForce:SetCycle(cyc)
+                                vmForce:SetPlaybackRate(1)
+                            end
                         end
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
                         local inReloadGrace = recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil
