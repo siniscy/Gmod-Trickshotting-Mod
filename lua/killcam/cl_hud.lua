@@ -95,6 +95,12 @@ local function InitSizes()
         shadow = false,
         antialias = true,
     })
+    Scalar.RegisterFont("Killcam_Rank_BO2", 48, 12, {
+        font = "AgencyFB",
+        weight = 700,
+        shadow = false,
+        antialias = true,
+    })
     Scalar.RegisterSize("UI_SCALE_KCHUD", 624, 124)
     sizeInitialized = true
 end
@@ -328,27 +334,17 @@ local function getTime()
     return string.format("0:%04.1f", time)
 end
 
-local function DrawPlayerCard(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
+local function DrawPlayerCardMW2(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
     local top_h, bot_h = w * 0.23, w * 0.096
-    -- BO2 uses AgencyFB for the title text, clantag, and player name --
-    -- MW2 (and every other HUD type) keep Conduit ITC untouched.
-    local isBO2 = CoDHUD_GetHUDType() == "bo2"
-    local titleFont = isBO2 and "Killcam_Title_BO2" or "Killcam_Title"
-    local nameFont  = isBO2 and "Killcam_Name_BO2"  or "Killcam_Name"
 
     surface.SetDrawColor(color_white)
---// Top/Bottom -- BO2's killcam card has no striped bg_ backing at all,
-    -- just the title/icon/text graphics floating on their own. MW2 (and
-    -- everything else, by default) keeps both bg_248x48.png/bg_248x20.png
-    -- backings.
-    if not isBO2 then
-        surface.SetMaterial(mat_topbar)
-        surface.DrawTexturedRect(x, y, w, top_h)
+--// Top
+    surface.SetMaterial(mat_topbar)
+    surface.DrawTexturedRect(x, y, w, top_h)
 
 --// Bottom
-        surface.SetMaterial(mat_bottombar)
-        surface.DrawTexturedRect(x, y + top_h, w, bot_h)
-    end
+    surface.SetMaterial(mat_bottombar)
+    surface.DrawTexturedRect(x, y + top_h, w, bot_h)
     surface.SetDrawColor(color_white)
 
 --// Title image (supports GIF animation)
@@ -357,24 +353,73 @@ local function DrawPlayerCard(x, y, w, mat_title, mat_icon, mat_lvl, str_title, 
 --// Title text -- "Custom Text" is killcam_hud_text's unset default; treat
     -- that as "never customized" and draw nothing, same as the lobby roster.
     if str_title ~= "" and str_title ~= "Custom Text" then
-        draw.SimpleTextOutlined(str_title, titleFont, x + w * 0.76 * 0.5, y - w * 0.76 * 0.02 + w * 0.76 * 0.2 * 0.5, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
+        draw.SimpleTextOutlined(str_title, "Killcam_Title", x + w * 0.76 * 0.5, y - w * 0.76 * 0.02 + w * 0.76 * 0.2 * 0.5, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
     end
 
 --// Clantag text
-    draw.SimpleTextOutlined(str_clantag, titleFont, x + w * 0.02, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
+    draw.SimpleTextOutlined(str_clantag, "Killcam_Title", x + w * 0.02, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
 
 --// Icon (supports GIF animation)
     MatDraw(mat_icon, x + w - top_h, y, top_h, top_h)
 
 --// Name
-    draw.SimpleTextOutlined(str_nick, nameFont, x + w * 0.025, y + w * 0.22, Color(160,255,190), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 3, Color(0, 0, 0))
-    
+    draw.SimpleTextOutlined(str_nick, "Killcam_Name", x + w * 0.025, y + w * 0.22, Color(160,255,190), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 3, Color(0, 0, 0))
+
 --// Level
     draw.SimpleTextOutlined(str_lvl, "Killcam_Rank", x + w - w * 0.025, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 2, Color(0,0,0))
 
     surface.SetFont("Killcam_Rank")
     local level_size = surface.GetTextSize(str_lvl)
     MatDraw(mat_lvl, x + w - w * 0.025 - level_size - bot_h, y + top_h, bot_h, bot_h)
+end
+
+-- BO2's card has no bg_ backing at all -- name, clantag, emblem, prestige
+-- icon, and level are all drawn directly on top of the title graphic
+-- itself, not in separate bar rows below it like MW2. Layout (per
+-- reference screenshot): name at the top of the title with the clantag
+-- directly beneath it, the emblem to the LEFT of the name, and the
+-- prestige icon centered horizontally, lower than the name, with the
+-- level number spaced a little to the prestige icon's right.
+local function DrawPlayerCardBO2(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
+    local titleW, titleH = w * 0.76, w * 0.76 * 0.2
+    -- Pin the title's top edge to the bottom black bar's own top edge
+    -- (see DrawKillcamOverlay's surface.DrawRect(0, ScrH()*0.86+1, ...))
+    -- so it never bleeds up into the visible gameplay footage above it --
+    -- MW2 gets away with floating above that line because its striped
+    -- bg_ backing visually covers the gap; BO2 has nothing behind it.
+    local titleX, titleY = x, math.max(y, ScrH() * 0.86)
+
+    surface.SetDrawColor(color_white)
+--// Title image (supports GIF animation)
+    MatDraw(mat_title, titleX, titleY, titleW, titleH)
+
+--// Emblem -- to the left of the name
+    local emblemSize = titleH * 0.5
+    local emblemX, emblemY = titleX + titleW * 0.02, titleY + titleH * 0.08
+    MatDraw(mat_icon, emblemX, emblemY, emblemSize, emblemSize)
+
+--// Name (white, AgencyFB) -- top of the title, right of the emblem
+    local nameX, nameY = emblemX + emblemSize + titleW * 0.02, titleY + titleH * 0.06
+    draw.SimpleTextOutlined(str_nick, "Killcam_Name_BO2", nameX, nameY, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 3, Color(0,0,0))
+
+--// Clantag -- directly beneath the name
+    draw.SimpleTextOutlined(str_clantag, "Killcam_Title_BO2", nameX, titleY + titleH * 0.42, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_TOP, 3, Color(0,0,0))
+
+--// Prestige icon -- lower than the name, centered horizontally
+    local lvlIconSize = titleH * 0.4
+    local lvlIconX, lvlIconY = titleX + titleW * 0.5 - lvlIconSize * 0.5, titleY + titleH * 0.55
+    MatDraw(mat_lvl, lvlIconX, lvlIconY, lvlIconSize, lvlIconSize)
+
+--// Level number (AgencyFB) -- spaced out to the right of the prestige icon
+    draw.SimpleTextOutlined(str_lvl, "Killcam_Rank_BO2", lvlIconX + lvlIconSize + titleW * 0.02, lvlIconY + lvlIconSize * 0.5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 2, Color(0,0,0))
+end
+
+local function DrawPlayerCard(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
+    if CoDHUD_GetHUDType() == "bo2" then
+        DrawPlayerCardBO2(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
+    else
+        DrawPlayerCardMW2(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
+    end
 end
 
 local hide = {
@@ -428,8 +473,11 @@ local function DrawKillcamOverlay()
     -- drawn for BO2 -- so nothing else that reads it needs to change.
     local isBO2Overlay = CoDHUD_GetHUDType() == "bo2"
     local topTextFont = isBO2Overlay and "Killcam_HUD_BO2" or "Killcam_HUD"
-    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    -- BO2: sit 15px above the top black bar's bottom edge (a fixed pixel
+    -- offset, not proportional to screen height like MW2's -4%).
+    local topTextY = isBO2Overlay and (ScrH()*0.1 - 15) or (ScrH()*0.1 - ScrH()*0.04)
+    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5+4, topTextY + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5, topTextY, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
     if not isBO2Overlay then
         draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
         draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
