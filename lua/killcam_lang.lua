@@ -1,10 +1,10 @@
 -- Translations for "ROUND WINNING KILL" by language code
 local hud_toptext_translations = {
     ["en"]    = "ROUND WINNING KILL",
-    ["de"]    = "RUNDENENTSCHEIDENDER KILL",
-    ["fr"]    = "ÉLIMINATION DÉCISIVE",
+    ["de"]    = "RUNDENGEWINNENDER ABSCHUSS",
+    ["fr"]    = "ÉLIMINATION DE VICTOIRE",
     ["es"]    = "ELIMINACIÓN GANADORA",
-    ["it"]    = "UCCISIONE VINCENTE",
+    ["it"]    = "UCCISONE DELLA VITTORIA DEL ROUND",
     ["pt"]    = "ABATE DECISIVO",
     ["ru"]    = "ПОБЕДНЫЙ УБИЙСТВО",
     ["pl"]    = "ZABÓJSTWO RUNDOWE",
@@ -28,10 +28,10 @@ local hud_toptext_translations = {
 -- Translations for "FINAL KILLCAM" (TDM/FFA final kill)
 local hud_gamewinning_translations = {
     ["en"]    = "FINAL KILLCAM",
-    ["de"]    = "SPIELENTSCHEIDENDER KILL",
+    ["de"]    = "SPIELGEWINNENDER ABSCHUSS",
     ["fr"]    = "ÉLIMINATION GAGNANTE",
     ["es"]    = "ELIMINACIÓN GANADORA DEL JUEGO",
-    ["it"]    = "UCCISIONE VINCENTE DEL GIOCO",
+    ["it"]    = "UCCISONE DELLA VITTORIA",
     ["pt"]    = "ABATE VENCEDOR DO JOGO",
     ["ru"]    = "ПОБЕДНЫЙ УБИЙСТВО В ИГРЕ",
     ["pl"]    = "ZABÓJSTWO WYGRYWAJĄCE GRĘ",
