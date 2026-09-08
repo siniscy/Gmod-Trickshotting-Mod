@@ -69,12 +69,30 @@ function CoD4Crosshair_Draw(inKillcam)
 
     local ply = LocalPlayer()
     if not IsValid(ply) then return end
-    if not ply:Alive() then return end
-    if ply:GetFOV() < 45 then return end
+
+    -- During killcam, whoever DIDN'T get the kill is parked in
+    -- MOVETYPE_OBSERVER watching the killer via OBS_MODE_IN_EYE -- their
+    -- own player entity isn't really "alive"/on the ground/moving in any
+    -- meaningful sense, which was making the crosshair vanish or freeze
+    -- for the non-killer specifically. Base the checks on whichever
+    -- entity's movement actually matters: the killer's, if we're
+    -- spectating one (the killer themselves has no observer target, so
+    -- this naturally falls back to their own state).
+    local subject = ply
+    if inKillcam then
+        local target = ply:GetObserverTarget()
+        if IsValid(target) and target:IsPlayer() then
+            subject = target
+        end
+    end
+
+    if not IsValid(subject) then return end
+    if not subject:Alive() then return end
+    if subject:GetFOV() < 45 then return end
 
     local ft    = FrameTime()
-    local vel2d = ply:GetVelocity():Length2D()
-    local isAir = not ply:IsOnGround()
+    local vel2d = subject:GetVelocity():Length2D()
+    local isAir = not subject:IsOnGround()
 
     if isAir then
         spreadFrac = math.min(spreadFrac + DECAY_MOVE * ft, 1)
