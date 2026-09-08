@@ -256,17 +256,31 @@ RegisterData("weapon", {
                     local prevFrame  = recorder.replay_frames[tick - 1]
                     local prevWeapon = prevFrame and prevFrame.weapon
                     if prevWeapon and prevWeapon[1] == weptbl[1] and weptbl[2] and prevWeapon[2] then
-                        -- Forcing SendWeaponAnim(ACT_VM_RELOAD) whenever the
-                        -- recorded clip went up used to live here. Even after
-                        -- requiring the clip to reach max capacity (not just
-                        -- "went up"), it kept firing at moments that didn't
-                        -- match any real reload -- TFA Base's own clip
-                        -- reporting is apparently too noisy frame-to-frame
-                        -- for this kind of heuristic to be reliable.
-                        -- Disabled entirely: the actual ammo count still
-                        -- replays correctly via SetClip1/SetClip2 below
-                        -- regardless -- this only ever controlled whether the
-                        -- hands-reloading animation played on top of that.
+                        -- EXPERIMENTAL (2nd attempt): forcing
+                        -- SendWeaponAnim(ACT_VM_RELOAD) on any clip increase
+                        -- used to false-trigger constantly -- TFA Base's own
+                        -- clip reporting is noisy frame-to-frame, and a
+                        -- single real reload could report several small
+                        -- increases along the way. Two changes from the
+                        -- removed attempt: only fire when the clip lands
+                        -- EXACTLY at the weapon's real max capacity (a
+                        -- genuine completed reload, not a partial ammo
+                        -- pickup or a noisy intermediate reading), and a
+                        -- per-recorder cooldown so one real reload's own
+                        -- jitter can't retrigger the animation multiple
+                        -- times. If this still misfires, revert this block
+                        -- back to plain SetClip1/SetClip2 with no animation
+                        -- rather than attempting a 3rd heuristic.
+                        local maxClip = wep:GetMaxClip1()
+                        local lastAnim = recorder.KC_LastReloadAnimTime or 0
+                        if weptbl[2] > prevWeapon[2]
+                            and maxClip and maxClip > 0
+                            and weptbl[2] >= maxClip
+                            and prevWeapon[2] < maxClip
+                            and CurTime() - lastAnim > 1.5 then
+                            recorder.KC_LastReloadAnimTime = CurTime()
+                            wep:SendWeaponAnim(ACT_VM_RELOAD)
+                        end
                         if weptbl[2] < prevWeapon[2] then
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
