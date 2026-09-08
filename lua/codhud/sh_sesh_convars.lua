@@ -19,4 +19,13 @@ if SERVER then
     -- sv_sesh_teams.lua) so it can't run before the CreateConVar above
     -- it regardless of file load order.
     GetConVar("sesh_war_limit"):SetInt(75)
+
+    -- Same protection for S&D's round-win target. A live match was
+    -- observed ending at round 3 instead of 4 because this convar had
+    -- drifted to "3" from earlier testing (FCVAR_ARCHIVE persists
+    -- whatever it was last set to, across map changes and restarts,
+    -- overriding the "4" in CreateConVar above). A first-time host
+    -- should never have to manually run a console command just to get
+    -- the mode's correct win condition -- hardwire it the same way.
+    GetConVar("sesh_sd_rounds"):SetInt(4)
 end
