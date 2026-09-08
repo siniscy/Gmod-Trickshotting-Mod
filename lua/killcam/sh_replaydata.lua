@@ -470,6 +470,18 @@ RegisterData("weapon", {
                                 local elapsed = CurTime() - (recorder.KC_ReloadStartTime or CurTime())
                                 local cyc = (dur and dur > 0) and math.Clamp(elapsed / dur, 0, 1) or 0
                                 if vmForce:GetSequence() ~= recorder.KC_ReloadVMSeq then
+                                    -- DIAGNOSTIC: proves something else is
+                                    -- still actively overwriting the
+                                    -- sequence mid-grace (a real ongoing
+                                    -- fight), as opposed to the grace
+                                    -- window just legitimately ending or
+                                    -- the replay running out of frames
+                                    -- (see Killcam.StopPlaying's own
+                                    -- diagnostic for that case).
+                                    print("[KC Reload VM DEBUG] mid-grace sequence was " .. tostring(vmForce:GetSequence()) ..
+                                        " (" .. tostring(vmForce:GetSequenceName(vmForce:GetSequence())) ..
+                                        "), forcing back to " .. tostring(recorder.KC_ReloadVMSeq) ..
+                                        " (" .. tostring(vmForce:GetSequenceName(recorder.KC_ReloadVMSeq)) .. ")")
                                     vmForce:ResetSequence(recorder.KC_ReloadVMSeq)
                                 end
                                 vmForce:SetCycle(cyc)
