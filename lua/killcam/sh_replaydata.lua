@@ -414,6 +414,12 @@ RegisterData("weapon", {
                                     -- whole grace window instead of once.
                                     recorder.KC_ReloadVMSeq       = seq
                                     recorder.KC_ReloadSeqDuration = vm:SequenceDuration(seq)
+                                    -- No timer -- the reload display stays
+                                    -- active until it either finishes
+                                    -- playing its own real duration or a
+                                    -- genuine shot cancels it (see below),
+                                    -- same as it would for real gunplay.
+                                    recorder.KC_ReloadActive = true
                                 end
                                 -- DIAGNOSTIC: if this weapon's viewmodel
                                 -- model never had a sequence tagged with
@@ -431,42 +437,19 @@ RegisterData("weapon", {
                                     " currentSeq=" .. tostring(vm:GetSequence()) ..
                                     " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
-                            -- The grace window used to be a flat, hardcoded
-                            -- 1.6s no matter how long the real reload
-                            -- animation actually is. A live test proved
-                            -- both diagnostics above never fired (nothing
-                            -- fought the sequence, and the replay never ran
-                            -- out of frames) yet the spectator still never
-                            -- saw the reload -- because 1.6s was too SHORT
-                            -- for this weapon's real reload (a bolt-action
-                            -- sniper), so the animation got forcibly cut off
-                            -- and snapped straight to "fire" partway through,
-                            -- before it ever looked like a reload at all.
-                            -- Use the sequence's own real duration instead,
-                            -- so it always plays out completely.
-                            recorder.KC_ReloadGraceUntil = CurTime() + (
-                                (recorder.KC_ReloadSeqDuration and recorder.KC_ReloadSeqDuration > 0)
-                                and recorder.KC_ReloadSeqDuration or 1.6
-                            )
                             recorder.KC_ReloadStartTime = CurTime()
-                            -- 11th attempt (EXPERIMENTAL, user-approved):
-                            -- the 10th attempt's per-tick re-assertion
-                            -- still lost the fight -- the sequence kept
-                            -- alternating reload/fire every tick in the
-                            -- log, meaning TFA Base's own Think() is
-                            -- ALSO reasserting its own idea of "the
-                            -- correct sequence" every tick, and whichever
-                            -- of us the engine happens to run last within
-                            -- a given tick wins that tick. Rather than
-                            -- keep racing it, remove it from the race
-                            -- entirely: suppress the weapon's own Think()
-                            -- for the whole grace window (restored once it
-                            -- ends, see below) so there's nothing left to
-                            -- fight over the sequence. Risk: Think() may
-                            -- also handle other passive weapon logic
-                            -- (recoil recovery, etc.) that will briefly
-                            -- pause during this window -- acceptable for
-                            -- a ~1.6s killcam replay window.
+                            -- 11th attempt: suppress the weapon's own
+                            -- Think() while a reload display is active, so
+                            -- nothing else recalculates "the correct
+                            -- sequence" out from under our own forcing.
+                            -- The 13th attempt (sv_main.lua stripping real
+                            -- attack/reload input server-side before
+                            -- replaying it) turned out to be the actual
+                            -- fix for the sequence fight, so this may not
+                            -- even be load-bearing anymore, but it's cheap
+                            -- and harmless to keep as a second layer.
+                            -- Restored once the reload display ends (see
+                            -- below), not on any fixed timer.
                             if isfunction(wep.Think) and not recorder.KC_ReloadOrigThink then
                                 recorder.KC_ReloadOrigThink = wep.Think
                                 recorder.KC_ReloadThinkWep  = wep
@@ -475,11 +458,16 @@ RegisterData("weapon", {
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         -- Keep re-forcing the reload sequence EVERY TICK
-                        -- for the whole grace window, not just once at the
-                        -- trigger tick -- whatever is reverting it (see
-                        -- above) runs every tick too, so a single
-                        -- assertion loses that race almost immediately.
-                        if recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil and recorder.KC_ReloadVMSeq then
+                        -- while a reload display is active -- no fixed
+                        -- timer. It ends itself two ways: naturally, once
+                        -- elapsed time reaches the sequence's own real
+                        -- duration (it finished playing), or early, the
+                        -- instant a genuine shot is detected below (a real
+                        -- shot legitimately cancels an in-progress reload,
+                        -- same as it would for a real player -- and a
+                        -- later reload press still starts a fresh one
+                        -- normally).
+                        if recorder.KC_ReloadActive and recorder.KC_ReloadVMSeq then
                             local vmForce = pl:GetViewModel()
                             if IsValid(vmForce) then
                                 local dur = recorder.KC_ReloadSeqDuration
@@ -488,13 +476,13 @@ RegisterData("weapon", {
                                 if vmForce:GetSequence() ~= recorder.KC_ReloadVMSeq then
                                     -- DIAGNOSTIC: proves something else is
                                     -- still actively overwriting the
-                                    -- sequence mid-grace (a real ongoing
-                                    -- fight), as opposed to the grace
-                                    -- window just legitimately ending or
-                                    -- the replay running out of frames
-                                    -- (see Killcam.StopPlaying's own
-                                    -- diagnostic for that case).
-                                    print("[KC Reload VM DEBUG] mid-grace sequence was " .. tostring(vmForce:GetSequence()) ..
+                                    -- sequence while the reload is active
+                                    -- (a real ongoing fight), as opposed to
+                                    -- it finishing naturally or the replay
+                                    -- running out of frames (see
+                                    -- Killcam.StopPlaying's own diagnostic
+                                    -- for that case).
+                                    print("[KC Reload VM DEBUG] mid-reload sequence was " .. tostring(vmForce:GetSequence()) ..
                                         " (" .. tostring(vmForce:GetSequenceName(vmForce:GetSequence())) ..
                                         "), forcing back to " .. tostring(recorder.KC_ReloadVMSeq) ..
                                         " (" .. tostring(vmForce:GetSequenceName(recorder.KC_ReloadVMSeq)) .. ")")
@@ -502,16 +490,23 @@ RegisterData("weapon", {
                                 end
                                 vmForce:SetCycle(cyc)
                                 vmForce:SetPlaybackRate(1)
+                                if dur and dur > 0 and elapsed >= dur then
+                                    -- Finished playing naturally -- stop
+                                    -- holding it, real clip/sequence data
+                                    -- resumes on its own from here.
+                                    recorder.KC_ReloadActive = false
+                                end
                             end
-                        elseif recorder.KC_ReloadOrigThink and IsValid(recorder.KC_ReloadThinkWep) then
-                            -- Grace window ended -- restore the weapon's
-                            -- real Think() so normal weapon logic resumes.
+                        end
+                        if not recorder.KC_ReloadActive and recorder.KC_ReloadOrigThink and IsValid(recorder.KC_ReloadThinkWep) then
+                            -- Reload display ended (naturally or cancelled
+                            -- by a shot) -- restore the weapon's real
+                            -- Think() so normal weapon logic resumes.
                             recorder.KC_ReloadThinkWep.Think = recorder.KC_ReloadOrigThink
                             recorder.KC_ReloadOrigThink = nil
                             recorder.KC_ReloadThinkWep  = nil
                         end
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
-                        local inReloadGrace = recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil
                         -- Noisy Clip1() recording (the same source noise
                         -- that made reload fire 3x for 2 real reloads --
                         -- see above) also double-counts shots: a bounce
@@ -529,9 +524,16 @@ RegisterData("weapon", {
                         if weptbl[2] > prevWeapon[2] then
                             recorder.KC_LastFiredClip = nil
                         end
-                        if weptbl[2] < prevWeapon[2] and isAttacking and not inReloadGrace
+                        if weptbl[2] < prevWeapon[2] and isAttacking
                             and (not recorder.KC_LastFiredClip or weptbl[2] < recorder.KC_LastFiredClip) then
                             recorder.KC_LastFiredClip = weptbl[2]
+                            -- A real shot cancels any in-progress reload
+                            -- display, the same as it would for a real
+                            -- player -- release the clip hold and let the
+                            -- fire animation take over uncontested. A
+                            -- later reload press still starts a brand new
+                            -- reload display normally.
+                            recorder.KC_ReloadActive = false
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
                             -- (the "buttons" data type replaying IN_ATTACK)
@@ -570,9 +572,9 @@ RegisterData("weapon", {
                             -- it can no longer fire this.
                             -- The kill frame gets its OWN unconditional
                             -- DoAttackEvent()+ForceGunSoundAuto() call from
-                            -- the "shot" data type below (runs every kill,
-                            -- no inReloadGrace guard). This comment already
-                            -- said to skip both here on the kill frame, but
+                            -- the "shot" data type below (runs every kill).
+                            -- This comment already said to skip both here
+                            -- on the kill frame, but
                             -- the code only ever skipped DoAttackEvent() --
                             -- ForceGunSoundAuto() ran unconditionally right
                             -- after, so every kill played the gunshot sound
@@ -586,12 +588,12 @@ RegisterData("weapon", {
                     end
                 end
 
-                if recorder and recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil then
-                    -- Still inside the reload's grace window -- keep
-                    -- showing the pre-reload (low/empty) clip instead of
-                    -- the recorded value, so the reload animation has
-                    -- time to actually play before the clip visibly
-                    -- refills. See the reload-trigger block above.
+                if recorder and recorder.KC_ReloadActive then
+                    -- Reload display still active -- keep showing the
+                    -- pre-reload (low/empty) clip instead of the recorded
+                    -- value, so the reload animation has time to actually
+                    -- play before the clip visibly refills. See the
+                    -- reload-trigger block above.
                     wep:SetClip1(recorder.KC_ReloadHoldClip1)
                     wep:SetClip2(recorder.KC_ReloadHoldClip2)
                 else

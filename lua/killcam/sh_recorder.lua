@@ -36,14 +36,13 @@ function recObj:SetKill(npc)
     -- ~10s window total; whatever isn't spent after the kill is spent
     -- rewound before it). 1s wasn't enough for a reload's animation/sound
     -- to finish recording at all, so playback always ran out of buffer and
-    -- ended mid-reload. 3s helped but still wasn't quite enough for every
-    -- weapon -- a live test with the M82 (a slow bolt-action reload)
-    -- consistently showed ~0.9-0.95s of reload grace still unconsumed
-    -- when the replay ran out of frames (see Killcam.StopPlaying's own
-    -- diagnostic). 5s gives a comfortable margin above that for slower
-    -- reloads, at the cost of ~2s less pre-kill footage out of the same
-    -- fixed 10s total buffer.
-    self.SaveTimeout = CurTime() + 5
+    -- ended mid-reload -- which is what actually cut the killcam short,
+    -- not anything about round/match transitions. 3s comfortably covers a
+    -- normal reload. (A timer-based reload grace window used to also need
+    -- extra runway here, but that mechanism is gone -- see sh_replaydata.lua
+    -- -- so 3s no longer needs to cover a full reload animation, just
+    -- normal post-kill footage.)
+    self.SaveTimeout = CurTime() + 3
     self.KillSaved = false
 end
 
