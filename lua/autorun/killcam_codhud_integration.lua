@@ -1338,20 +1338,24 @@ if CLIENT then
         end
     end)
 
-    -- Ensure HUD is restored if killcam ends unexpectedly
-    hook.Add("KillcamReplayStopped", "CoDHUD_HUDRestoreOnStop", function()
-        if not hudWasDisabled then
-            RunConsoleCommand("codhud_quickdisable_hud", "0")
-        end
-        killcamWasActive = false
-    end)
-
     local function IsKillcamActive()
         return KC_Playing and KC_Playing() or false
     end
 
     local hudWasDisabled   = false
     local killcamWasActive = false
+
+    -- Ensure HUD is restored if killcam ends unexpectedly.
+    -- hudWasDisabled/killcamWasActive used to be declared AFTER this hook,
+    -- so this closure captured disconnected globals of the same name
+    -- instead of the locals below that CoDHUD_KillcamHUDToggle actually
+    -- uses -- this safety net silently did nothing.
+    hook.Add("KillcamReplayStopped", "CoDHUD_HUDRestoreOnStop", function()
+        if not hudWasDisabled then
+            RunConsoleCommand("codhud_quickdisable_hud", "0")
+        end
+        killcamWasActive = false
+    end)
 
     hook.Add("Think", "CoDHUD_KillcamHUDToggle", function()
         local active = IsKillcamActive()
@@ -1371,6 +1375,24 @@ if CLIENT then
             killcamWasActive = false
             RunConsoleCommand("codhud_quickdisable_hud", hudWasDisabled and "1" or "0")
             print("[Killcam DEBUG] Ended for " .. (IsValid(LocalPlayer()) and LocalPlayer():Nick() or "?"))
+        end
+    end)
+
+    -- Raw diagnostic, independent of killcamWasActive/IsKillcamActive above --
+    -- logs every time the actual networked Killcam_Playing global changes
+    -- value on THIS client. If a client ever sees the round-end freeze/grey
+    -- screen but the killcam never visibly plays for them, checking whether
+    -- this print fires at all during that window tells us whether the raw
+    -- global itself failed to reach that client, or whether it arrived fine
+    -- and something else (HUD toggle, greyscale suppression, etc.) failed
+    -- to react to it correctly.
+    local lastRawKillcamPlaying = nil
+    hook.Add("Think", "CoDHUD_KillcamPlayingRawWatch", function()
+        local raw = GetGlobalBool("Killcam_Playing")
+        if raw ~= lastRawKillcamPlaying then
+            lastRawKillcamPlaying = raw
+            print("[Killcam RAW] Killcam_Playing global changed to " .. tostring(raw) ..
+                " on " .. (IsValid(LocalPlayer()) and LocalPlayer():Nick() or "?"))
         end
     end)
 
