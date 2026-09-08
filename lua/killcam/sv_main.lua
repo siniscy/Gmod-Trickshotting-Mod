@@ -16,6 +16,34 @@ hook.Add("StartCommand", "Killcam - Main handler", function(pl, cmd)
         pl.KILLCAM_StartDataInitiated = false
         pl.KC_Recorder:CaptureFrame(cmd)
     elseif pl.KC_Recorder and KC_isKiller(pl) then
+        -- 13th attempt at the reload/fire-getting-stomped problem: the
+        -- "buttons" data type (sh_replaydata.lua) calls cmd:SetButtons()
+        -- on the CLIENT side (cl_main.lua's own PlayFrame call) so the
+        -- killer's own client re-sends the ORIGINAL recorded IN_ATTACK/
+        -- IN_RELOAD bits as this tick's real outgoing input -- a
+        -- StartCommand modification isn't just local prediction, it's
+        -- what actually gets transmitted. That means the SERVER receives
+        -- genuine attack/reload input during replay, and the engine's
+        -- native weapon system (CheckReload, ItemPostFrame -- and TFA
+        -- Base's own logic, which checks owner:KeyDown(IN_ATTACK/
+        -- IN_RELOAD) directly, independent of anything in this addon)
+        -- reacts and fires/reloads the weapon FOR REAL, overwriting
+        -- whatever sequence "weapon"'s Set() just forced -- explaining
+        -- why neither suppressing wep.Think() (11th attempt) nor
+        -- removing our own wep:Reload() call (12th attempt) ever fully
+        -- stopped it: neither touches the engine's own reaction to
+        -- genuine button input. Strip attack/reload from the SERVER's
+        -- copy of cmd before replaying it, so the native weapon system
+        -- never sees a real press during replay -- all visible
+        -- reload/fire animation, sound, and clip state is driven purely
+        -- by "weapon"'s own manual forcing (which already reads the
+        -- recorded buttons directly from replay_frames, not from cmd).
+        -- The killer's own client-side prediction (cl_main.lua) is left
+        -- untouched, since that's local-only and not what the spectator
+        -- watches.
+        cmd:RemoveKey(IN_ATTACK)
+        cmd:RemoveKey(IN_ATTACK2)
+        cmd:RemoveKey(IN_RELOAD)
         pl.KC_Recorder:PlayFrame(cmd)
         return true
     end
