@@ -19,6 +19,36 @@ local function RegisterData(name, tbl)
     end
 end
 
+-- 6th attempt at the killer's-reload-invisible-to-spectator problem.
+-- Four different server-side approaches (weapon SendWeaponAnim, viewmodel
+-- SendWeaponAnim [crashed -- not a valid method there], wep:Reload())
+-- either never reached an OBS_MODE_IN_EYE spectator's screen at all, or
+-- (per the killer's own reload working every time) only ever affected the
+-- reloading player's OWN client -- almost certainly via their own TFA
+-- Base client prediction reacting to the replayed IN_RELOAD button press,
+-- which a third-party spectator can never benefit from no matter what we
+-- force server-side. Stop trying to make the ENTITY network correctly to
+-- spectators and instead force the visual directly, locally, on whoever
+-- is NOT the reloading player -- something fully within our own control.
+if SERVER then
+    util.AddNetworkString("KC_ForceReloadVisual")
+end
+
+if CLIENT then
+    net.Receive("KC_ForceReloadVisual", function()
+        local reloader = net.ReadEntity()
+        if not IsValid(reloader) or reloader == LocalPlayer() then return end
+        local vm = reloader:GetViewModel()
+        if not IsValid(vm) then return end
+        local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
+        if seq and seq >= 0 then
+            vm:ResetSequence(seq)
+            vm:SetCycle(0)
+            vm:SetPlaybackRate(1)
+        end
+    end)
+end
+
 function Killcam.CollectData(pl, cmd, types)
     local tbl = {}
     if types then
@@ -297,6 +327,13 @@ RegisterData("weapon", {
                             if isfunction(wep.Reload) then
                                 wep:Reload()
                             end
+                            -- 6th attempt: force the reload visual locally
+                            -- on whoever is NOT pl (see KC_ForceReloadVisual
+                            -- above) instead of hoping the entity networks
+                            -- correctly to an OBS_MODE_IN_EYE spectator.
+                            net.Start("KC_ForceReloadVisual")
+                                net.WriteEntity(pl)
+                            net.Broadcast()
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         if weptbl[2] < prevWeapon[2] then
