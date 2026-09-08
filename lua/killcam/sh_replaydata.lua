@@ -331,6 +331,21 @@ RegisterData("weapon", {
                                     vm:SetCycle(0)
                                     vm:SetPlaybackRate(1)
                                 end
+                                -- DIAGNOSTIC: if this weapon's viewmodel
+                                -- model never had a sequence tagged with
+                                -- the standard ACT_VM_RELOAD activity in
+                                -- the first place (common for custom TFA
+                                -- Base content, which often looks up
+                                -- reload animations by exact sequence name
+                                -- internally instead of the activity
+                                -- system), SelectWeightedSequence returns
+                                -- -1 and nothing built on it could ever
+                                -- have worked, regardless of entity/realm.
+                                print("[KC Reload VM DEBUG] model=" .. tostring(vm:GetModel()) ..
+                                    " ACT_VM_RELOAD seq=" .. tostring(seq) ..
+                                    " seqCount=" .. tostring(vm:GetSequenceCount()) ..
+                                    " currentSeq=" .. tostring(vm:GetSequence()) ..
+                                    " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
