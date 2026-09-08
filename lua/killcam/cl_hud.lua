@@ -3,30 +3,10 @@ net.Receive("Killcam - Hitmarker", function()
     hitTime = CurTime() + 0.1
 end)
 
--- TDM/FFA show "FINAL KILLCAM" (Bank Gothic GT); S&D and everything
--- else show "ROUND WINNING KILL" (Bank Gothic Medium) -- mirrors the
--- same gamemode split used for the text itself in killcam_lang.lua.
-local function GetTopTextFont()
-    local gm = GetConVar("codhud_selected_gamemode") and GetConVar("codhud_selected_gamemode"):GetString() or "war"
-    if gm == "war" or gm == "dm" or gm == "sesh_war" or gm == "sesh_dm" then
-        return "Killcam_HUD_Final"
-    end
-    return "Killcam_HUD"
-end
-
 local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
-        font = "Bank Gothic Medium",
-        extended = false,
-        weight = 500,
-        shadow = false,
-        antialias = true,
-    })
-    -- TDM/FFA's "FINAL KILLCAM" top text uses a different Bank Gothic
-    -- cut than S&D's "ROUND WINNING KILL" -- see GetTopTextFont() below.
-    Scalar.RegisterFont("Killcam_HUD_Final", 72, 12, {
         font = "Bank Gothic GT",
         extended = false,
         weight = 500,
@@ -374,9 +354,8 @@ hook.Add("HUDPaint", "aaaKillcamHUD", function()
         surface.SetDrawColor(color_white)
 
         --// Top bar text
-        local topTextFont = GetTopTextFont()
-        draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-        draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+        draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+        draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
         draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
         draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
 
