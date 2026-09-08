@@ -49,5 +49,24 @@ function KC_GetKiller()
 end
 
 function KC_isKiller(pl)
-    return KC_GetKiller() and KC_GetKiller() == pl or false
+    if KC_GetKiller() == pl then return true end
+    -- Fallback for the same networking gap KC_Playing() already works
+    -- around: Killcam_Killer (a networked global entity) is set in the
+    -- exact same server call as Killcam_Playing (OnKillcamReplayStart),
+    -- and is subject to the identical delivery delay/loss to a given
+    -- client -- confirmed via logs showing Killcam_Playing(global)=false
+    -- still printing at the moment KC_Playing() already reads true.
+    -- cl_main.lua's StartCommand hook uses KC_isKiller(pl) to decide
+    -- whether THIS client should apply the recorded replay data
+    -- (position/angle/weapon) to its own view during killcam -- if this
+    -- read false while Killcam_Killer was still in flight, the killer's
+    -- own camera never got the replayed angles (looked frozen facing
+    -- one direction) and the server's forced reload animation fought
+    -- against normal, unsuppressed client prediction (reload not
+    -- visibly showing). _G.KC_ClientReplaying is only ever true on the
+    -- actual killer's own client (only the killer receives "Killcam -
+    -- NPC Frames"), so if it's set and pl is us, we ARE the killer
+    -- regardless of whether Killcam_Killer itself has arrived yet.
+    if CLIENT and pl == LocalPlayer() and _G.KC_ClientReplaying then return true end
+    return false
 end
