@@ -240,61 +240,44 @@ RegisterData("weapon", {
             pl:SelectWeapon(weptbl[1])
             local wep = pl:GetActiveWeapon()
             if IsValid(wep) then
-                -- If the recorded clip is higher than the PREVIOUS replayed
-                -- frame's clip (same weapon), a reload happened at this
-                -- point in the original recording -- trigger the reload
-                -- animation so it's actually visible. Without this, only
-                -- the raw clip number silently snapped between frames:
-                -- "buttons" (which replays the IN_RELOAD keypress that
-                -- would naturally trigger this) is clientside-only, so it
-                -- only affects the killer's own local prediction -- every
-                -- spectator watches the server's simulation, which never
-                -- got told a reload was happening at all.
+                -- Detect a reload from the recorded INPUT (see below) and
+                -- trigger the animation server-side so it's actually
+                -- visible. Without this, only the raw clip number silently
+                -- snapped between frames: "buttons" (which replays the
+                -- IN_RELOAD keypress that would naturally trigger this) is
+                -- clientside-only, so it only affects the killer's own
+                -- local prediction -- every spectator watches the server's
+                -- simulation, which never got told a reload was happening
+                -- at all.
                 local recorder = pl.KC_Recorder
                 local tick = KC_ServerTick and KC_ServerTick()
                 if recorder and tick and tick > 1 then
                     local prevFrame  = recorder.replay_frames[tick - 1]
+                    local curFrame   = recorder.replay_frames[tick]
                     local prevWeapon = prevFrame and prevFrame.weapon
                     if prevWeapon and prevWeapon[1] == weptbl[1] and weptbl[2] and prevWeapon[2] then
-                        -- EXPERIMENTAL (2nd attempt): forcing
-                        -- SendWeaponAnim(ACT_VM_RELOAD) on any clip increase
-                        -- used to false-trigger constantly -- TFA Base's own
-                        -- clip reporting is noisy frame-to-frame, and a
-                        -- single real reload could report several small
-                        -- increases along the way. Two changes from the
-                        -- removed attempt: only fire when the clip lands
-                        -- EXACTLY at the weapon's real max capacity (a
-                        -- genuine completed reload, not a partial ammo
-                        -- pickup or a noisy intermediate reading), and a
-                        -- per-recorder cooldown so one real reload's own
-                        -- jitter can't retrigger the animation multiple
-                        -- times. NOTE: 1.5s was too long -- a player who
-                        -- reloaded more than once in the recorded window
-                        -- (small clip, panic reloads, etc.) only got the
-                        -- LAST reload's animation, the earlier ones got
-                        -- suppressed by this same cooldown. Short cooldown
-                        -- now only guards against the same reload
-                        -- re-triggering within a couple of frames, not
-                        -- against two genuinely separate reloads. If this
-                        -- still misfires, revert this block back to plain
-                        -- SetClip1/SetClip2 with no animation rather than
-                        -- attempting a 3rd heuristic.
-                        local maxClip = wep:GetMaxClip1()
-                        local lastAnim = recorder.KC_LastReloadAnimTime or 0
-                        if weptbl[2] > prevWeapon[2] then
-                            if maxClip and maxClip > 0
-                                and weptbl[2] >= maxClip
-                                and prevWeapon[2] < maxClip
-                                and CurTime() - lastAnim > 0.3 then
-                                recorder.KC_LastReloadAnimTime = CurTime()
-                                wep:SendWeaponAnim(ACT_VM_RELOAD)
-                                print("[KC Reload] FIRED for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
-                                    " clip " .. tostring(prevWeapon[2]) .. "->" .. tostring(weptbl[2]) .. "/" .. tostring(maxClip))
-                            else
-                                print("[KC Reload] skipped clip increase for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
-                                    " clip " .. tostring(prevWeapon[2]) .. "->" .. tostring(weptbl[2]) .. " maxClip=" .. tostring(maxClip) ..
-                                    " cooldownLeft=" .. tostring(0.3 - (CurTime() - lastAnim)))
-                            end
+                        -- 3rd attempt: every clip-delta heuristic (any
+                        -- increase, then "must reach max clip", then that
+                        -- same check plus a cooldown) still misfired --
+                        -- TFA Base's own Clip1() reporting is genuinely
+                        -- noisy at the RECORDING source (a single real
+                        -- reload can be recorded as e.g. 4->5->4->5),
+                        -- not just during replay, so no clip-value
+                        -- threshold can ever be reliable. Use the actual
+                        -- recorded input instead: "buttons" already
+                        -- captures cmd:GetButtons() every recorded tick
+                        -- (a raw input flag, not a derived/predicted game
+                        -- value -- nothing for TFA Base to jitter). Fire
+                        -- once on the rising edge of IN_RELOAD in the
+                        -- recording -- the exact tick the player actually
+                        -- pressed reload.
+                        local prevButtons = prevFrame and prevFrame.buttons
+                        local curButtons  = curFrame and curFrame.buttons
+                        local wasReloading = prevButtons and bit.band(prevButtons, IN_RELOAD) ~= 0
+                        local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
+                        if isReloading and not wasReloading then
+                            wep:SendWeaponAnim(ACT_VM_RELOAD)
+                            print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         if weptbl[2] < prevWeapon[2] then
                             -- A shot was fired at this point in the original
