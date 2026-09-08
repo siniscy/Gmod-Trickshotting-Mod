@@ -35,10 +35,23 @@ hook.Add("Think", "Killcam - Frame Handling", function()
 end)
 
 function Killcam.StartPlaying(pl)
-    local status = hook.Run("OnKillcamReplayStart", pl) or true
-    if !status then return end
+    -- Set the Killcam_Playing flag BEFORE running OnKillcamReplayStart
+    -- (which sends the killer a large compressed replay-data blob via
+    -- Killcam.SendFrames). When a remote (non-host) client was the killer,
+    -- that big blob and this small networked global were being sent to
+    -- the same connection back-to-back, and the global update was
+    -- consistently getting lost for that client -- it never once compared
+    -- Killcam_Playing=true afterward, even though the listen-server host
+    -- always saw it fine (their own GetGlobalBool never goes over the
+    -- network at all, so it isn't affected by this ordering). Giving the
+    -- small critical flag a head start in the send queue avoids that.
     st(1)
     SetGlobalBool("Killcam_Playing", true)
+    local status = hook.Run("OnKillcamReplayStart", pl) or true
+    if !status then
+        SetGlobalBool("Killcam_Playing", false)
+        return
+    end
     hook.Run("KillcamReplayStarted")
 end
 

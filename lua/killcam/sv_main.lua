@@ -41,7 +41,13 @@ hook.Add("EntityTakeDamage", "Killcam - Show hit", function(target, dmg)
 end)
 
 hook.Add("OnKillcamReplayStart", "Killcam - Start playing", function(pl)
-    if not KC_Playing() and pl.KC_Recorder then
+    -- Used to also require "not KC_Playing()" here, back when
+    -- Killcam.StartPlaying set Killcam_Playing=true AFTER running this
+    -- hook. It now sets that flag first (see sv_replayhandler.lua), so
+    -- KC_Playing() always reads true by the time this runs -- the real
+    -- re-entrancy guard is Killcam.BeginFor's own check before StartPlaying
+    -- is ever called.
+    if pl.KC_Recorder then
         SetGlobalEntity("Killcam_Killer", pl)
         Killcam.SendFrames(pl)
         Killcam.LoadNPCData(pl)
