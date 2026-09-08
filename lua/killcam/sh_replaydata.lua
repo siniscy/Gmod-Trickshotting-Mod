@@ -382,7 +382,8 @@ RegisterData("weapon", {
                             end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
-                        if weptbl[2] < prevWeapon[2] then
+                        local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
+                        if weptbl[2] < prevWeapon[2] and isAttacking then
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
                             -- (the "buttons" data type replaying IN_ATTACK)
@@ -400,6 +401,25 @@ RegisterData("weapon", {
                             -- own DoAttackEvent() call from "shot", and
                             -- firing twice in the same tick would double up
                             -- the sound/muzzle flash.
+                            --
+                            -- Used to fire on ANY clip decrease alone --
+                            -- same class of noisy-clip-value bug already
+                            -- fixed for reload detection. Confirmed via a
+                            -- live [KC Reload VM SPECTATOR] log: a reload's
+                            -- sequence correctly reached the spectator's
+                            -- client, then got overwritten by a "fire"
+                            -- sequence change within a tick or two --
+                            -- clip-read noise right as the clip resets to
+                            -- max was enough to look like a "decrease" on
+                            -- some later tick, false-triggering a shot that
+                            -- cut the reload animation short before it
+                            -- could visibly play. Now also requires
+                            -- IN_ATTACK actually held this tick -- still
+                            -- catches every real shot of an automatic
+                            -- weapon (IN_ATTACK stays held the whole
+                            -- burst, so this isn't a rising-edge check),
+                            -- but a clip blip with no attack input behind
+                            -- it can no longer fire this.
                             local frame = recorder:GetFrame(tick)
                             if not (frame and frame.kill) then
                                 pl:DoAttackEvent()
