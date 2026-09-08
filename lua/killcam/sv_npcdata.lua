@@ -237,9 +237,18 @@ hook.Add("OnKillcamReplayStart", "Killcam - Get rid of NPC ragdolls", function(p
                         -- (send before TakeDamageInfo in case the death animation
                         -- throws due to missing ACT_DIESIMPLE on the model)
                         if IsValid(plRef) then
+                            -- Omit the killer (plRef) -- they already got their
+                            -- own live KC_HitNotification (and XP) the instant
+                            -- they made the kill, via sv_hitmarker.lua. The
+                            -- killer isn't watching their own killcam replay
+                            -- (KC_Playing() reads false on their client), so
+                            -- broadcasting this to them too made their client
+                            -- take the "not in killcam" branch again and award
+                            -- the same kill's XP a second time (e.g. the
+                            -- duplicate "+500" for an S&D kill).
                             net.Start("KC_HitNotification")
                                 net.WriteBool(true)
-                            net.Broadcast()
+                            net.SendOmit(plRef)
                             net.Start("Killcam - KillcamNPCKilled")
                             net.Broadcast()
                         end
