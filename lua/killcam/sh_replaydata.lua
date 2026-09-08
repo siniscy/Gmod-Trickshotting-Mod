@@ -349,6 +349,27 @@ RegisterData("weapon", {
                             if isfunction(wep.Reload) then
                                 wep:Reload()
                             end
+                            -- 8th attempt: the recorded clip can read as
+                            -- already full on the SAME tick IN_RELOAD is
+                            -- first pressed (recording granularity --
+                            -- the real reload takes ~2s to visually
+                            -- complete, but if the live clip-refill event
+                            -- landed inside one recorded tick, that's all
+                            -- the recording ever captured). wep:SetClip1
+                            -- below runs unconditionally every tick and
+                            -- would then jump the clip to full THIS SAME
+                            -- TICK the reload just started -- if TFA Base
+                            -- checks "is the clip already full" to decide
+                            -- a reload is done, an instantly-full clip
+                            -- would cancel the animation almost
+                            -- immediately, independent of shot detection
+                            -- entirely. Hold the clip at its pre-reload
+                            -- value for a grace period so the animation
+                            -- has time to actually play before the clip
+                            -- visibly refills.
+                            recorder.KC_ReloadGraceUntil = CurTime() + 1.6
+                            recorder.KC_ReloadHoldClip1  = prevWeapon[2]
+                            recorder.KC_ReloadHoldClip2  = prevWeapon[3]
                             -- 7th attempt: SERVER-side ResetSequence
                             -- directly on the killer's actual viewmodel
                             -- entity (see the top-of-file comment) --
@@ -429,8 +450,18 @@ RegisterData("weapon", {
                     end
                 end
 
-                wep:SetClip1(weptbl[2])
-                wep:SetClip2(weptbl[3])
+                if recorder and recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil then
+                    -- Still inside the reload's grace window -- keep
+                    -- showing the pre-reload (low/empty) clip instead of
+                    -- the recorded value, so the reload animation has
+                    -- time to actually play before the clip visibly
+                    -- refills. See the reload-trigger block above.
+                    wep:SetClip1(recorder.KC_ReloadHoldClip1)
+                    wep:SetClip2(recorder.KC_ReloadHoldClip2)
+                else
+                    wep:SetClip1(weptbl[2])
+                    wep:SetClip2(weptbl[3])
+                end
             end
             return
         end
