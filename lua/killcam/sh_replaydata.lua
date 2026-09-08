@@ -533,6 +533,19 @@ RegisterData("weapon", {
                             -- fire animation take over uncontested. A
                             -- later reload press still starts a brand new
                             -- reload display normally.
+                            if recorder.KC_ReloadActive then
+                                -- DIAGNOSTIC: distinguishes a legitimate
+                                -- cancel (a real recorded shot landed while
+                                -- a reload was displaying, correct per
+                                -- design) from a still-buggy premature cut
+                                -- -- if this NEVER prints for a reload that
+                                -- still looked instantly cancelled, nothing
+                                -- here is what's cutting it short.
+                                print("[KC Reload] shot cancelled in-progress reload for " .. pl:Nick() ..
+                                    " at tick=" .. tostring(tick) .. " (was " ..
+                                    string.format("%.2f", CurTime() - (recorder.KC_ReloadStartTime or CurTime())) ..
+                                    "s into the reload)")
+                            end
                             recorder.KC_ReloadActive = false
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
@@ -625,6 +638,21 @@ RegisterData("shot", {
     Get = function() return false end,
     Set = function(pl, cmd)
         if pl.KC_Recorder:GetFrame(KC_ServerTick()).kill then
+            -- The kill shot cancels an in-progress reload display just
+            -- like any other shot ("weapon"'s own shot detection above
+            -- already does this) -- without clearing KC_ReloadActive
+            -- here too, a reload still playing at the exact kill tick
+            -- left the flag set after this fired the kill's own fire
+            -- animation, so the very next tick's per-tick reassertion
+            -- (which only looks at KC_ReloadActive, not at whether a
+            -- kill just happened) snapped the sequence straight back to
+            -- "reload" -- making the pre-kill reload look like it never
+            -- got cancelled, and confusing it with any genuinely new
+            -- reload trigger shortly after.
+            local recorder = pl.KC_Recorder
+            if recorder then
+                recorder.KC_ReloadActive = false
+            end
             pl:DoAttackEvent()
             ForceGunSoundAuto(pl:GetActiveWeapon())
         end
