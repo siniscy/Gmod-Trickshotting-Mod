@@ -295,9 +295,11 @@ local function OpenLobby()
         -- renders BELOW any open VGUI panel -- this full-screen lobby frame
         -- was blocking it out completely. Paint it here instead, after our
         -- own background but before the sidebar/roster/mapbox child panels
-        -- (which paint on top of us automatically), so players can still
-        -- see their card/title/icon preview while the lobby is open.
-        if KC_DrawKillcamPreviewOverlay then KC_DrawKillcamPreviewOverlay() end
+        -- (which paint on top of us automatically). Gated on
+        -- Killcam.menuOpened -- only show it when kc_menu is actually open
+        -- (e.g. via the "Edit Card" button, or typed manually), not just
+        -- because the lobby itself is open.
+        if Killcam.menuOpened and KC_DrawKillcamPreviewOverlay then KC_DrawKillcamPreviewOverlay() end
     end
     KC_Lobby_Frame = frame
 
