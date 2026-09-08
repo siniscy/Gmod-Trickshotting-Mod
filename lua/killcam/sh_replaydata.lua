@@ -524,7 +524,37 @@ RegisterData("weapon", {
                         if weptbl[2] > prevWeapon[2] then
                             recorder.KC_LastFiredClip = nil
                         end
-                        if weptbl[2] < prevWeapon[2] and isAttacking
+                        -- A live host log caught a reload getting
+                        -- cancelled after existing for exactly "0.00s" --
+                        -- the reload edge and a detected "shot" landed a
+                        -- single tick apart, right at the kill. The kill
+                        -- shot's own clip decrease never updates
+                        -- KC_LastFiredClip (it fires through the separate,
+                        -- unconditional "shot" data type below, which has
+                        -- no reason to touch it), so ordinary post-kill
+                        -- clip-recording noise -- the exact same jitter
+                        -- already proven to misfire reload detection 3x
+                        -- for 2 real reloads -- reads as a brand new real
+                        -- shot and wipes out a reload before it existed
+                        -- for even one visible tick. A real player cannot
+                        -- physically fire within a couple ticks of
+                        -- pressing reload, so while a reload is freshly
+                        -- active, require a tiny minimum age before
+                        -- treating a detected clip-decrease as a real
+                        -- shot at all -- this is a noise filter, not a
+                        -- display-length timer: it never blocks a genuine
+                        -- shot landing any meaningful time after the
+                        -- reload started, only the same-instant recording
+                        -- jitter right at the reload's own trigger tick.
+                        local reloadTooFresh = recorder.KC_ReloadActive
+                            and (CurTime() - (recorder.KC_ReloadStartTime or 0)) <= 0.1
+                        if reloadTooFresh then
+                            print("[KC Reload] IGNORED a clip-decrease " ..
+                                string.format("%.3f", CurTime() - (recorder.KC_ReloadStartTime or 0)) ..
+                                "s into an active reload for " .. pl:Nick() ..
+                                " -- too close to the reload's own start to be a real shot, treating as recording noise")
+                        end
+                        if not reloadTooFresh and weptbl[2] < prevWeapon[2] and isAttacking
                             and (not recorder.KC_LastFiredClip or weptbl[2] < recorder.KC_LastFiredClip) then
                             recorder.KC_LastFiredClip = weptbl[2]
                             -- A real shot cancels any in-progress reload
