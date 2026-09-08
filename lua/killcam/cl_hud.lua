@@ -48,6 +48,17 @@ local function InitSizes()
         shadow = false,
         antialias = true,
     })
+    -- BO2's killcam top text ("FINAL KILLCAM"/"ROUND WINNING KILL") uses
+    -- AgencyFB -- the same font already used for every other BO2 HUD
+    -- element in this addon (cl_a_gameloader_helpers.lua) and the font
+    -- Black Ops 2's real HUD actually uses. resource/fonts/AgencyFB-Bold.ttf
+    -- registers as family "AgencyFB" (confirmed, no space).
+    Scalar.RegisterFont("Killcam_HUD_BO2", 72, 12, {
+        font = "AgencyFB",
+        weight = 700,
+        shadow = false,
+        antialias = true,
+    })
     Scalar.RegisterFont("Killcam_Name", 48, 12, {
         font = "Conduit ITC",
         extended = false,
@@ -66,6 +77,21 @@ local function InitSizes()
         font = "Conduit ITC",
         extended = false,
         weight = 500,
+        shadow = false,
+        antialias = true,
+    })
+    -- BO2 variants of the player-card fonts (name, title text, clantag --
+    -- clantag shares Killcam_Title with the title text) -- MW2 and every
+    -- other HUD type keep the Conduit ITC fonts above untouched.
+    Scalar.RegisterFont("Killcam_Name_BO2", 48, 12, {
+        font = "AgencyFB",
+        weight = 700,
+        shadow = false,
+        antialias = true,
+    })
+    Scalar.RegisterFont("Killcam_Title_BO2", 40, 12, {
+        font = "AgencyFB",
+        weight = 700,
         shadow = false,
         antialias = true,
     })
@@ -304,15 +330,25 @@ end
 
 local function DrawPlayerCard(x, y, w, mat_title, mat_icon, mat_lvl, str_title, str_clantag, str_nick, str_lvl)
     local top_h, bot_h = w * 0.23, w * 0.096
+    -- BO2 uses AgencyFB for the title text, clantag, and player name --
+    -- MW2 (and every other HUD type) keep Conduit ITC untouched.
+    local isBO2 = CoDHUD_GetHUDType() == "bo2"
+    local titleFont = isBO2 and "Killcam_Title_BO2" or "Killcam_Title"
+    local nameFont  = isBO2 and "Killcam_Name_BO2"  or "Killcam_Name"
 
     surface.SetDrawColor(color_white)
---// Top
-    surface.SetMaterial(mat_topbar)
-    surface.DrawTexturedRect(x, y, w, top_h)
-    
+--// Top/Bottom -- BO2's killcam card has no striped bg_ backing at all,
+    -- just the title/icon/text graphics floating on their own. MW2 (and
+    -- everything else, by default) keeps both bg_248x48.png/bg_248x20.png
+    -- backings.
+    if not isBO2 then
+        surface.SetMaterial(mat_topbar)
+        surface.DrawTexturedRect(x, y, w, top_h)
+
 --// Bottom
-    surface.SetMaterial(mat_bottombar)
-    surface.DrawTexturedRect(x, y + top_h, w, bot_h)
+        surface.SetMaterial(mat_bottombar)
+        surface.DrawTexturedRect(x, y + top_h, w, bot_h)
+    end
     surface.SetDrawColor(color_white)
 
 --// Title image (supports GIF animation)
@@ -321,17 +357,17 @@ local function DrawPlayerCard(x, y, w, mat_title, mat_icon, mat_lvl, str_title, 
 --// Title text -- "Custom Text" is killcam_hud_text's unset default; treat
     -- that as "never customized" and draw nothing, same as the lobby roster.
     if str_title ~= "" and str_title ~= "Custom Text" then
-        draw.SimpleTextOutlined(str_title, "Killcam_Title", x + w * 0.76 * 0.5, y - w * 0.76 * 0.02 + w * 0.76 * 0.2 * 0.5, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
+        draw.SimpleTextOutlined(str_title, titleFont, x + w * 0.76 * 0.5, y - w * 0.76 * 0.02 + w * 0.76 * 0.2 * 0.5, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
     end
 
 --// Clantag text
-    draw.SimpleTextOutlined(str_clantag, "Killcam_Title", x + w * 0.02, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
-    
+    draw.SimpleTextOutlined(str_clantag, titleFont, x + w * 0.02, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER, 3, Color(0,0,0))
+
 --// Icon (supports GIF animation)
     MatDraw(mat_icon, x + w - top_h, y, top_h, top_h)
-    
+
 --// Name
-    draw.SimpleTextOutlined(str_nick, "Killcam_Name", x + w * 0.025, y + w * 0.22, Color(160,255,190), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 3, Color(0, 0, 0))
+    draw.SimpleTextOutlined(str_nick, nameFont, x + w * 0.025, y + w * 0.22, Color(160,255,190), TEXT_ALIGN_LEFT, TEXT_ALIGN_BOTTOM, 3, Color(0, 0, 0))
     
 --// Level
     draw.SimpleTextOutlined(str_lvl, "Killcam_Rank", x + w - w * 0.025, y + top_h +  bot_h * 0.5, color_white, TEXT_ALIGN_RIGHT, TEXT_ALIGN_CENTER, 2, Color(0,0,0))
@@ -386,11 +422,18 @@ local function DrawKillcamOverlay()
 
     surface.SetDrawColor(color_white)
 
-    --// Top bar text
-    draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-    draw.SimpleText(Killcam.LANG.hud_toptext, "Killcam_HUD", ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-    draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
-    draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    --// Top bar text -- BO2 uses AgencyFB (Killcam_HUD_BO2) instead of
+    -- BankGothic/Poster Gothic, and has no countdown timer at all. The
+    -- timer's own logic (getTime()) keeps running either way -- just not
+    -- drawn for BO2 -- so nothing else that reads it needs to change.
+    local isBO2Overlay = CoDHUD_GetHUDType() == "bo2"
+    local topTextFont = isBO2Overlay and "Killcam_HUD_BO2" or "Killcam_HUD"
+    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5+4, ScrH()*0.1 + 4 - ScrH()*0.04, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    draw.SimpleText(Killcam.LANG.hud_toptext, topTextFont, ScrW()*0.5, ScrH()*0.1 - ScrH()*0.04, color_white, TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    if not isBO2Overlay then
+        draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5+4, ScrH()*0.1 + 4, Color(0,0,0), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+        draw.SimpleText(getTime(), "Killcam_HUD_Timer", ScrW()*0.5, ScrH()*0.1 , Color(230,230,230), TEXT_ALIGN_CENTER, TEXT_ALIGN_BOTTOM)
+    end
 
     --// Hitmarker
     if CurTime() < hitTime then
