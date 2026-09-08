@@ -277,6 +277,25 @@ RegisterData("weapon", {
                         local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
                         if isReloading and not wasReloading then
                             wep:SendWeaponAnim(ACT_VM_RELOAD)
+                            -- The weapon entity's animation is what the
+                            -- KILLER's own client actually shows (their
+                            -- reload was already visible without this --
+                            -- likely driven by their own TFA Base
+                            -- prediction reacting to the replayed
+                            -- IN_RELOAD button press via the "buttons"
+                            -- data type, not this call at all). A
+                            -- spectator watching via OBS_MODE_IN_EYE
+                            -- renders the KILLER'S VIEWMODEL specifically
+                            -- (a separate entity from the weapon), which
+                            -- SendWeaponAnim on the weapon alone doesn't
+                            -- reliably drive -- confirmed FIRING correctly
+                            -- server-side every time, yet still invisible
+                            -- to the spectator. Also force it directly on
+                            -- the viewmodel entity itself.
+                            local vm = pl:GetViewModel()
+                            if IsValid(vm) then
+                                vm:SendWeaponAnim(ACT_VM_RELOAD)
+                            end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         if weptbl[2] < prevWeapon[2] then
