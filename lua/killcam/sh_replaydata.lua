@@ -404,7 +404,8 @@ RegisterData("weapon", {
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
                         end
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
-                        if weptbl[2] < prevWeapon[2] and isAttacking then
+                        local inReloadGrace = recorder.KC_ReloadGraceUntil and CurTime() < recorder.KC_ReloadGraceUntil
+                        if weptbl[2] < prevWeapon[2] and isAttacking and not inReloadGrace then
                             -- A shot was fired at this point in the original
                             -- recording. The natural replay path for this
                             -- (the "buttons" data type replaying IN_ATTACK)
