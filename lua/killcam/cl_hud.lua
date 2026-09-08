@@ -14,7 +14,7 @@ local function InitSizes()
         antialias = true,
     })
     Scalar.RegisterFont("Killcam_HUD_Timer", 60, 12, {
-        font = "Conduit ITC",
+        font = "Bank Gothic GT",
         extended = false,
         weight = 500,
         shadow = false,
