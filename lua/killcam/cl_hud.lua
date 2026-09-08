@@ -3,6 +3,16 @@ net.Receive("Killcam - Hitmarker", function()
     hitTime = CurTime() + 0.1
 end)
 
+-- French/German/Italian use Poster Gothic ATF Medium for the killcam
+-- title and timer; everything else keeps BankGothic Md BT.
+local function GetKillcamTitleFontFamily()
+    local lang = GetConVar("gmod_language") and GetConVar("gmod_language"):GetString() or "en"
+    if lang == "fr" or lang == "de" or lang == "it" then
+        return "Poster Gothic ATF Medium"
+    end
+    return "BankGothic Md BT"
+end
+
 local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
@@ -10,15 +20,16 @@ local function InitSizes()
     -- resource/fonts/bankgthd.ttf registers as "BankGothic Md BT" ("Md" =
     -- Medium), the same name already used successfully elsewhere in this
     -- addon (e.g. MW2_Score_Main in cl_a_gameloader_helpers.lua).
+    local killcamTitleFont = GetKillcamTitleFontFamily()
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
-        font = "BankGothic Md BT",
+        font = killcamTitleFont,
         extended = false,
         weight = 500,
         shadow = false,
         antialias = true,
     })
     Scalar.RegisterFont("Killcam_HUD_Timer", 60, 12, {
-        font = "BankGothic Md BT",
+        font = killcamTitleFont,
         extended = false,
         weight = 500,
         shadow = false,
@@ -48,6 +59,15 @@ local function InitSizes()
     Scalar.RegisterSize("UI_SCALE_KCHUD", 624, 124)
     sizeInitialized = true
 end
+
+-- Re-register the killcam title/timer fonts if the player switches
+-- language in-game, so the fr/de/it swap applies without needing a
+-- restart.
+cvars.AddChangeCallback("gmod_language", function()
+    if sizeInitialized then
+        InitSizes()
+    end
+end, "Killcam_LanguageFontCb")
 
 -- Animated image support for killcam titles and icons.
 -- GMod cannot read GIF files. Instead, extract frames as numbered PNGs.
