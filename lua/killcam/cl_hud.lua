@@ -6,8 +6,12 @@ end)
 local sizeInitialized = false
 local function InitSizes()
     Scalar.SetResolution("QHD")
+    -- "Bank Gothic Medium" isn't the font's actual registered family name --
+    -- resource/fonts/bankgthd.ttf registers as "BankGothic Md BT" ("Md" =
+    -- Medium), the same name already used successfully elsewhere in this
+    -- addon (e.g. MW2_Score_Main in cl_a_gameloader_helpers.lua).
     Scalar.RegisterFont("Killcam_HUD", 72, 12, {
-        font = "Bank Gothic",
+        font = "BankGothic Md BT",
         extended = false,
         weight = 500,
         shadow = false,
