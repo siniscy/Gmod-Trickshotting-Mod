@@ -1,0 +1,22 @@
+---- [ SESH TEAM SYSTEM CONVARS ] ----
+-- Split out of sv_sesh_teams.lua into a shared ("sh_") file so these
+-- actually get created in BOTH realms. codhud_init.lua's loader only
+-- ever include()s "sv_"-prefixed files when SERVER is true -- an
+-- "sv_" file being FCVAR_REPLICATED-flagged doesn't matter if the
+-- client never executes CreateConVar for it in the first place.
+-- Confirmed via a live diagnostic: sesh_sd_rounds read as nil on a
+-- real remote client for a whole match (vs. correctly 3 on the
+-- listen-server host, which only "worked" because it's the same
+-- process as the server) -- the client-side round-bar fill code divides
+-- by this value, so it never filled correctly for anyone but the host.
+CreateConVar("sesh_war_limit",   "75",  FCVAR_ARCHIVE, "Kill limit for sesh TDM")
+CreateConVar("sesh_sd_rounds",   "4",   {FCVAR_ARCHIVE, FCVAR_REPLICATED}, "Rounds needed to win sesh SND (first to X)")
+CreateConVar("sesh_sd_maxrounds","7",   FCVAR_ARCHIVE, "Hard round cap for sesh SND — match ends after this many rounds regardless")
+
+if SERVER then
+    -- Hardwired -- a saved/drifted archive value must not be able to
+    -- change the TDM win limit. Kept in this same file (not
+    -- sv_sesh_teams.lua) so it can't run before the CreateConVar above
+    -- it regardless of file load order.
+    GetConVar("sesh_war_limit"):SetInt(75)
+end

@@ -2,23 +2,17 @@
 -- Handles: team score tracking, round tracking, win conditions, net broadcasts
 -- Player is always Team A (friendly), all bots are Team B (enemy)
 
+-- ConVars live in sh_sesh_convars.lua now -- this addon's loader
+-- (codhud_init.lua) only ever include()s "sv_"-prefixed files when
+-- SERVER is true, so moving the CreateConVar calls above this guard
+-- (a fix tried first) did nothing: the client never executes this
+-- file's Lua at all, guard or no guard. A real shared ("sh_") file is
+-- required so both realms actually run the CreateConVar calls.
+
 if not SERVER then return end
 
 util.AddNetworkString("Sesh_TeamScores")   -- sends scoreA, scoreB, limitA, limitB to all
 util.AddNetworkString("Sesh_RoundResult")  -- sends winner string + round counts to all
-
--- ConVars (changeable any time)
--- sesh_sd_rounds must be replicated -- this whole file is server-only (see
--- the SERVER guard above), so without FCVAR_REPLICATED the convar never
--- exists on the client at all, and the HUD's round-bar fill code (which
--- reads it client-side to know what counts as "full") silently falls back
--- to its old default instead, so the bar never actually reached 100%.
-CreateConVar("sesh_war_limit",   "75",  FCVAR_ARCHIVE, "Kill limit for sesh TDM")
-CreateConVar("sesh_sd_rounds",   "4",   {FCVAR_ARCHIVE, FCVAR_REPLICATED}, "Rounds needed to win sesh SND (first to X)")
-CreateConVar("sesh_sd_maxrounds","7",   FCVAR_ARCHIVE, "Hard round cap for sesh SND — match ends after this many rounds regardless")
-
--- Hardwired — a saved/drifted archive value must not be able to change the TDM win limit.
-GetConVar("sesh_war_limit"):SetInt(75)
 
 -- State
 _G.SeshTeam = _G.SeshTeam or {}
