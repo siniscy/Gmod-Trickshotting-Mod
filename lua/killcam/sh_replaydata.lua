@@ -71,6 +71,92 @@ if CLIENT then
     end)
 end
 
+-- 14th attempt: a host log proved the server-side reload state
+-- (KC_ReloadActive, forced sequence/cycle) was behaving correctly on a
+-- round the spectator still never saw show at all -- no "shot cancelled"
+-- print, no "mid-reload...forcing back" fight, the animation was still
+-- actively held when the replay ran out of frames, exactly like a round
+-- that DID display correctly for the same spectator. That rules out
+-- logic entirely: this is the same networked-delivery-gap problem
+-- already fixed once this session for Killcam_Playing/Killcam_Killer --
+-- a piece of server-authoritative state that's supposed to replicate to
+-- every client identically, but has been observed to silently fail to
+-- reach a genuine remote client's connection on some rounds while never
+-- failing for the listen-server host (whose own reads never go over the
+-- network at all). The fix there was the same: stop trusting the flaky
+-- channel and add a small, dedicated, explicitly-sent net message
+-- instead. Doing the same here for the viewmodel's reload sequence,
+-- rather than relying on it reaching the spectator as part of normal
+-- entity baseline replication.
+if SERVER then
+    util.AddNetworkString("KC_ReloadVMState")
+end
+
+local function KC_BroadcastReloadState(pl, active, seq, startTime)
+    net.Start("KC_ReloadVMState")
+        net.WriteEntity(pl)
+        net.WriteBool(active)
+        if active then
+            net.WriteUInt(seq, 16)
+            net.WriteFloat(startTime)
+        end
+    net.Broadcast()
+end
+
+if CLIENT then
+    _G.KC_ReloadNetState = _G.KC_ReloadNetState or {}
+    net.Receive("KC_ReloadVMState", function()
+        local pl     = net.ReadEntity()
+        local active = net.ReadBool()
+        if not IsValid(pl) then return end
+        if active then
+            _G.KC_ReloadNetState[pl] = {
+                seq       = net.ReadUInt(16),
+                startTime = net.ReadFloat(),
+            }
+        else
+            _G.KC_ReloadNetState[pl] = nil
+        end
+    end)
+
+    -- Applied purely client-side, independent of the viewmodel entity's
+    -- own networked sequence/cycle -- only for whoever we're actually
+    -- SPECTATING (the killer's own client already handles its own view
+    -- normally and shouldn't be touched here).
+    hook.Add("Think", "KC_ReloadVM_NetForce", function()
+        local lp = LocalPlayer()
+        if not IsValid(lp) then return end
+        for pl, data in pairs(_G.KC_ReloadNetState) do
+            if not IsValid(pl) then
+                _G.KC_ReloadNetState[pl] = nil
+                continue
+            end
+            if pl == lp then continue end
+            local target = lp:GetObserverTarget()
+            if target ~= pl then continue end
+            local vm = pl:GetViewModel()
+            if not IsValid(vm) then continue end
+            if vm:GetSequence() ~= data.seq then
+                vm:ResetSequence(data.seq)
+            end
+            local dur     = vm:SequenceDuration(data.seq)
+            local elapsed = CurTime() - data.startTime
+            -- Defensive only -- net messages are reliable, so the server
+            -- should always send an explicit "stop" (see the three call
+            -- sites in this file), but expire client-side too well past
+            -- the real duration so a missed message can't leave this
+            -- forcing a sequence forever.
+            if dur and dur > 0 and elapsed > dur + 1 then
+                _G.KC_ReloadNetState[pl] = nil
+                continue
+            end
+            local cyc = (dur and dur > 0) and math.Clamp(elapsed / dur, 0, 1) or 0
+            vm:SetCycle(cyc)
+            vm:SetPlaybackRate(1)
+        end
+    end)
+end
+
 function Killcam.CollectData(pl, cmd, types)
     local tbl = {}
     if types then
@@ -438,6 +524,13 @@ RegisterData("weapon", {
                                     " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
                             end
                             recorder.KC_ReloadStartTime = CurTime()
+                            -- 14th attempt: broadcast this explicitly
+                            -- (see top-of-file comment) instead of relying
+                            -- solely on the viewmodel entity's own
+                            -- networked sequence reaching every client.
+                            if recorder.KC_ReloadActive then
+                                KC_BroadcastReloadState(pl, true, recorder.KC_ReloadVMSeq, recorder.KC_ReloadStartTime)
+                            end
                             -- 11th attempt: suppress the weapon's own
                             -- Think() while a reload display is active, so
                             -- nothing else recalculates "the correct
@@ -495,6 +588,7 @@ RegisterData("weapon", {
                                     -- holding it, real clip/sequence data
                                     -- resumes on its own from here.
                                     recorder.KC_ReloadActive = false
+                                    KC_BroadcastReloadState(pl, false)
                                 end
                             end
                         end
@@ -575,6 +669,7 @@ RegisterData("weapon", {
                                     " at tick=" .. tostring(tick) .. " (was " ..
                                     string.format("%.2f", CurTime() - (recorder.KC_ReloadStartTime or CurTime())) ..
                                     "s into the reload)")
+                                KC_BroadcastReloadState(pl, false)
                             end
                             recorder.KC_ReloadActive = false
                             -- A shot was fired at this point in the original
@@ -680,8 +775,9 @@ RegisterData("shot", {
             -- got cancelled, and confusing it with any genuinely new
             -- reload trigger shortly after.
             local recorder = pl.KC_Recorder
-            if recorder then
+            if recorder and recorder.KC_ReloadActive then
                 recorder.KC_ReloadActive = false
+                KC_BroadcastReloadState(pl, false)
             end
             pl:DoAttackEvent()
             ForceGunSoundAuto(pl:GetActiveWeapon())
