@@ -341,7 +341,34 @@ RegisterData("angle", {
         end
 
         if pl.KILLCAM_StartDataInitiated then
-            local ang = LerpAngle(FrameTime() / engine.ServerFrameTime() * 0.125, pl:EyeAngles(), angle)
+            -- 22nd attempt: user confirmed fully disabling the Lerp removes
+            -- the post-kill "weapon bob" entirely, and it replicates
+            -- identically to spectators -- meaning it can't be a client-
+            -- only rendering quirk, it has to be in the actual angle value
+            -- this sends to the server via cmd:SetViewAngles(), which is
+            -- what a spectating OBS_MODE_IN_EYE camera (and the killer's
+            -- own) ultimately follows. FrameTime() is the KILLER's own last
+            -- rendered frame's wall-clock duration -- the wrong clock for a
+            -- step meant to represent one server tick's worth of progress.
+            -- The division by engine.ServerFrameTime() exists to normalize
+            -- total progress across however many times client prediction
+            -- re-simulates this same tick per rendered frame, not to let a
+            -- single frame's hitch dictate the step size -- but a frame
+            -- hitch (very plausible right at a kill: blood decals, ragdoll
+            -- spawn, hit sound/particles all firing at once) inflates
+            -- FrameTime() for that one call and produces an oversized
+            -- single-tick jump toward the target angle, which is exactly
+            -- what "bob"/snap right after the shot looks like. Clamp the
+            -- fraction so a hitch can't blow past a normal step size, while
+            -- leaving ordinary frame-time-based normalization intact.
+            local rawFrac = FrameTime() / engine.ServerFrameTime() * 0.125
+            if rawFrac > 0.25 then
+                print("[KC Angle DEBUG] frame-hitch clamp engaged for " .. pl:Nick() ..
+                    ": raw fraction " .. string.format("%.3f", rawFrac) ..
+                    " (FrameTime=" .. string.format("%.4f", FrameTime()) .. ") clamped to 0.25")
+            end
+            local frac = math.Clamp(rawFrac, 0, 0.25)
+            local ang = LerpAngle(frac, pl:EyeAngles(), angle)
             ang.r = 0
             cmd:SetViewAngles(ang)
         else
