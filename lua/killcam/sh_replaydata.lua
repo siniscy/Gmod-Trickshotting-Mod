@@ -460,13 +460,19 @@ RegisterData("weapon", {
                         local curButtons  = curFrame and curFrame.buttons
                         local wasReloading = prevButtons and bit.band(prevButtons, IN_RELOAD) ~= 0
                         local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
-                        local justSwitched = recorder.KC_LastWeaponSwitchTime and (CurTime() - recorder.KC_LastWeaponSwitchTime) < 0.15
-                        if isReloading and not wasReloading and justSwitched then
-                            print("[KC Reload] IGNORED a reload edge " ..
-                                string.format("%.3f", CurTime() - recorder.KC_LastWeaponSwitchTime) ..
-                                "s after a weapon switch for " .. pl:Nick() ..
-                                " weapon=" .. tostring(weptbl[1]) ..
-                                " -- too soon after the switch to be a real reload, treating as button-recording noise")
+                        local sinceSwitch = recorder.KC_LastWeaponSwitchTime and (CurTime() - recorder.KC_LastWeaponSwitchTime) or -1
+                        local justSwitched = sinceSwitch >= 0 and sinceSwitch < 0.15
+                        if isReloading and not wasReloading then
+                            -- DIAGNOSTIC: print the raw gap every time,
+                            -- regardless of whether the 0.15s threshold
+                            -- caught it -- the last test showed no
+                            -- "IGNORED" print at all, meaning the real gap
+                            -- is bigger than 0.15s. Logging the actual
+                            -- number instead of guessing at a new
+                            -- threshold blind.
+                            print("[KC Reload] edge for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
+                                " -- " .. string.format("%.3f", sinceSwitch) .. "s since last weapon switch" ..
+                                (justSwitched and " (IGNORED, too soon)" or ""))
                         end
                         if isReloading and not wasReloading and not justSwitched then
                             -- 4th attempt: SendWeaponAnim(ACT_VM_RELOAD) on
