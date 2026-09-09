@@ -681,24 +681,27 @@ RegisterData("weapon", {
                                 if recorder.KC_ReloadActive then
                                     KC_BroadcastReloadState(pl, true, recorder.KC_ReloadVMSeq, recorder.KC_ReloadStartTime)
                                 end
-                                -- 11th attempt: suppress the weapon's own
-                                -- Think() while a reload display is active, so
-                                -- nothing else recalculates "the correct
-                                -- sequence" out from under our own forcing.
-                                -- The 13th attempt (sv_main.lua stripping real
-                                -- attack/reload input server-side before
-                                -- replaying it) turned out to be the actual
-                                -- fix for the sequence fight, so this may not
-                                -- even be load-bearing anymore, but it's cheap
-                                -- and harmless to keep as a second layer.
-                                -- Restored once the reload display ends (see
-                                -- below), not on any fixed timer.
-                                local delayedWep = pl:GetActiveWeapon()
-                                if IsValid(delayedWep) and isfunction(delayedWep.Think) and not recorder.KC_ReloadOrigThink then
-                                    recorder.KC_ReloadOrigThink = delayedWep.Think
-                                    recorder.KC_ReloadThinkWep  = delayedWep
-                                    delayedWep.Think = function() end
-                                end
+                                -- 18th attempt: the 11th attempt's Think()
+                                -- suppression (freezing the weapon's own
+                                -- Think() for the reload's whole multi-
+                                -- second natural duration) is REMOVED here.
+                                -- "Repulling the same gun out again" (user's
+                                -- own description) matches a weapon
+                                -- redeploy/draw far better than anything
+                                -- camera- or punch-related -- if TFA Base's
+                                -- internal state drifts far enough out of
+                                -- sync while its Think() is frozen for
+                                -- seconds at a time, restoring it afterward
+                                -- could read as "this weapon was never
+                                -- properly deployed" and trigger a real
+                                -- redeploy/draw sequence right as our
+                                -- forcing releases control back to it. The
+                                -- 13th attempt (stripping real attack/
+                                -- reload input server-side) was already
+                                -- believed to be the actual fix for the
+                                -- sequence fight this was originally added
+                                -- for, making this a plausible left-over
+                                -- cause instead of a harmless safety net.
                             end)
                         end
                         -- Keep re-forcing the reload sequence EVERY TICK
@@ -757,14 +760,8 @@ RegisterData("weapon", {
                                 end
                             end
                         end
-                        if not recorder.KC_ReloadActive and recorder.KC_ReloadOrigThink and IsValid(recorder.KC_ReloadThinkWep) then
-                            -- Reload display ended (naturally or cancelled
-                            -- by a shot) -- restore the weapon's real
-                            -- Think() so normal weapon logic resumes.
-                            recorder.KC_ReloadThinkWep.Think = recorder.KC_ReloadOrigThink
-                            recorder.KC_ReloadOrigThink = nil
-                            recorder.KC_ReloadThinkWep  = nil
-                        end
+                        -- Think() suppression removed (18th attempt) -- see
+                        -- comment where it used to be set, above.
                         local isAttacking = curButtons and bit.band(curButtons, IN_ATTACK) ~= 0
                         -- Noisy Clip1() recording (the same source noise
                         -- that made reload fire 3x for 2 real reloads --
