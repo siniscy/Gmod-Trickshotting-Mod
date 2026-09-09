@@ -528,88 +528,108 @@ RegisterData("weapon", {
                             -- value for a grace period so the animation
                             -- has time to actually play before the clip
                             -- visibly refills.
-                            recorder.KC_ReloadHoldClip1  = prevWeapon[2]
-                            recorder.KC_ReloadHoldClip2  = prevWeapon[3]
-                            -- 7th attempt: SERVER-side ResetSequence
-                            -- directly on the killer's actual viewmodel
-                            -- entity (see the top-of-file comment) --
-                            -- becomes part of that entity's normal
-                            -- networked baseline, which is what an
-                            -- OBS_MODE_IN_EYE spectator's viewmodel
-                            -- rendering actually reads from.
-                            local vm = pl:GetViewModel()
-                            if IsValid(vm) then
-                                local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
-                                if seq and seq >= 0 then
-                                    vm:ResetSequence(seq)
-                                    vm:SetCycle(0)
-                                    vm:SetPlaybackRate(1)
-                                    -- 10th attempt: a ONE-TIME ResetSequence
-                                    -- call wasn't enough -- confirmed the
-                                    -- sequence still flips to "fire" right
-                                    -- after even with shot-detection fully
-                                    -- blocked during this same window (9th
-                                    -- attempt), proving something OTHER
-                                    -- than our own DoAttackEvent() call was
-                                    -- reverting it -- almost certainly TFA
-                                    -- Base's own per-tick weapon logic
-                                    -- recalculating "the correct sequence"
-                                    -- from internal state we never set.
-                                    -- Remember the target sequence so the
-                                    -- clip-hold block below can keep
-                                    -- RE-FORCING it every tick for the
-                                    -- whole grace window instead of once.
-                                    recorder.KC_ReloadVMSeq       = seq
-                                    recorder.KC_ReloadSeqDuration = vm:SequenceDuration(seq)
-                                    -- No timer -- the reload display stays
-                                    -- active until it either finishes
-                                    -- playing its own real duration or a
-                                    -- genuine shot cancels it (see below),
-                                    -- same as it would for real gunplay.
-                                    recorder.KC_ReloadActive = true
-                                end
-                                -- DIAGNOSTIC: if this weapon's viewmodel
-                                -- model never had a sequence tagged with
-                                -- the standard ACT_VM_RELOAD activity in
-                                -- the first place (common for custom TFA
-                                -- Base content, which often looks up
-                                -- reload animations by exact sequence name
-                                -- internally instead of the activity
-                                -- system), SelectWeightedSequence returns
-                                -- -1 and nothing built on it could ever
-                                -- have worked, regardless of entity/realm.
-                                print("[KC Reload VM DEBUG] model=" .. tostring(vm:GetModel()) ..
-                                    " ACT_VM_RELOAD seq=" .. tostring(seq) ..
-                                    " seqCount=" .. tostring(vm:GetSequenceCount()) ..
-                                    " currentSeq=" .. tostring(vm:GetSequence()) ..
-                                    " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
-                            end
-                            recorder.KC_ReloadStartTime = CurTime()
-                            -- 14th attempt: broadcast this explicitly
-                            -- (see top-of-file comment) instead of relying
-                            -- solely on the viewmodel entity's own
-                            -- networked sequence reaching every client.
-                            if recorder.KC_ReloadActive then
-                                KC_BroadcastReloadState(pl, true, recorder.KC_ReloadVMSeq, recorder.KC_ReloadStartTime)
-                            end
-                            -- 11th attempt: suppress the weapon's own
-                            -- Think() while a reload display is active, so
-                            -- nothing else recalculates "the correct
-                            -- sequence" out from under our own forcing.
-                            -- The 13th attempt (sv_main.lua stripping real
-                            -- attack/reload input server-side before
-                            -- replaying it) turned out to be the actual
-                            -- fix for the sequence fight, so this may not
-                            -- even be load-bearing anymore, but it's cheap
-                            -- and harmless to keep as a second layer.
-                            -- Restored once the reload display ends (see
-                            -- below), not on any fixed timer.
-                            if isfunction(wep.Think) and not recorder.KC_ReloadOrigThink then
-                                recorder.KC_ReloadOrigThink = wep.Think
-                                recorder.KC_ReloadThinkWep  = wep
-                                wep.Think = function() end
-                            end
                             print("[KC Reload] FIRED (IN_RELOAD edge) for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]))
+                            -- 15th attempt: the reload trigger itself is
+                            -- confirmed genuine (user confirmed they
+                            -- habitually reload right after every kill
+                            -- shot) -- ~0.75s after a weapon switch, real
+                            -- input, not noise. The unnatural look wasn't
+                            -- a false trigger at all: it's that our
+                            -- ResetSequence()+SetCycle(0) below is a hard,
+                            -- unblended cut, landing right on top of the
+                            -- kill shot's own recoil pose (still settling
+                            -- from DoAttackEvent() a fraction of a second
+                            -- earlier) with nothing smoothing the
+                            -- transition, unlike real gameplay's built-in
+                            -- animation blending. Give the recoil a brief
+                            -- moment to settle before cutting to the
+                            -- reload pose instead of colliding with it
+                            -- instantly.
+                            timer.Simple(0.15, function()
+                                if not IsValid(pl) or not recorder then return end
+                                recorder.KC_ReloadHoldClip1 = prevWeapon[2]
+                                recorder.KC_ReloadHoldClip2 = prevWeapon[3]
+                                -- 7th attempt: SERVER-side ResetSequence
+                                -- directly on the killer's actual viewmodel
+                                -- entity (see the top-of-file comment) --
+                                -- becomes part of that entity's normal
+                                -- networked baseline, which is what an
+                                -- OBS_MODE_IN_EYE spectator's viewmodel
+                                -- rendering actually reads from.
+                                local vm = pl:GetViewModel()
+                                if IsValid(vm) then
+                                    local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
+                                    if seq and seq >= 0 then
+                                        vm:ResetSequence(seq)
+                                        vm:SetCycle(0)
+                                        vm:SetPlaybackRate(1)
+                                        -- 10th attempt: a ONE-TIME ResetSequence
+                                        -- call wasn't enough -- confirmed the
+                                        -- sequence still flips to "fire" right
+                                        -- after even with shot-detection fully
+                                        -- blocked during this same window (9th
+                                        -- attempt), proving something OTHER
+                                        -- than our own DoAttackEvent() call was
+                                        -- reverting it -- almost certainly TFA
+                                        -- Base's own per-tick weapon logic
+                                        -- recalculating "the correct sequence"
+                                        -- from internal state we never set.
+                                        -- Remember the target sequence so the
+                                        -- clip-hold block below can keep
+                                        -- RE-FORCING it every tick for the
+                                        -- whole grace window instead of once.
+                                        recorder.KC_ReloadVMSeq       = seq
+                                        recorder.KC_ReloadSeqDuration = vm:SequenceDuration(seq)
+                                        -- No timer -- the reload display stays
+                                        -- active until it either finishes
+                                        -- playing its own real duration or a
+                                        -- genuine shot cancels it (see below),
+                                        -- same as it would for real gunplay.
+                                        recorder.KC_ReloadActive = true
+                                    end
+                                    -- DIAGNOSTIC: if this weapon's viewmodel
+                                    -- model never had a sequence tagged with
+                                    -- the standard ACT_VM_RELOAD activity in
+                                    -- the first place (common for custom TFA
+                                    -- Base content, which often looks up
+                                    -- reload animations by exact sequence name
+                                    -- internally instead of the activity
+                                    -- system), SelectWeightedSequence returns
+                                    -- -1 and nothing built on it could ever
+                                    -- have worked, regardless of entity/realm.
+                                    print("[KC Reload VM DEBUG] model=" .. tostring(vm:GetModel()) ..
+                                        " ACT_VM_RELOAD seq=" .. tostring(seq) ..
+                                        " seqCount=" .. tostring(vm:GetSequenceCount()) ..
+                                        " currentSeq=" .. tostring(vm:GetSequence()) ..
+                                        " currentSeqName=" .. tostring(vm:GetSequenceName(vm:GetSequence())))
+                                end
+                                recorder.KC_ReloadStartTime = CurTime()
+                                -- 14th attempt: broadcast this explicitly
+                                -- (see top-of-file comment) instead of relying
+                                -- solely on the viewmodel entity's own
+                                -- networked sequence reaching every client.
+                                if recorder.KC_ReloadActive then
+                                    KC_BroadcastReloadState(pl, true, recorder.KC_ReloadVMSeq, recorder.KC_ReloadStartTime)
+                                end
+                                -- 11th attempt: suppress the weapon's own
+                                -- Think() while a reload display is active, so
+                                -- nothing else recalculates "the correct
+                                -- sequence" out from under our own forcing.
+                                -- The 13th attempt (sv_main.lua stripping real
+                                -- attack/reload input server-side before
+                                -- replaying it) turned out to be the actual
+                                -- fix for the sequence fight, so this may not
+                                -- even be load-bearing anymore, but it's cheap
+                                -- and harmless to keep as a second layer.
+                                -- Restored once the reload display ends (see
+                                -- below), not on any fixed timer.
+                                local delayedWep = pl:GetActiveWeapon()
+                                if IsValid(delayedWep) and isfunction(delayedWep.Think) and not recorder.KC_ReloadOrigThink then
+                                    recorder.KC_ReloadOrigThink = delayedWep.Think
+                                    recorder.KC_ReloadThinkWep  = delayedWep
+                                    delayedWep.Think = function() end
+                                end
+                            end)
                         end
                         -- Keep re-forcing the reload sequence EVERY TICK
                         -- while a reload display is active -- no fixed
