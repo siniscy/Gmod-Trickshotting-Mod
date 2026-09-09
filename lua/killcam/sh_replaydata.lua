@@ -745,6 +745,17 @@ RegisterData("weapon", {
                             local frame = recorder:GetFrame(tick)
                             if not (frame and frame.kill) then
                                 pl:DoAttackEvent()
+                                -- DoAttackEvent() triggers TFA Base's own
+                                -- recoil kick (ViewPunch) on the killer's
+                                -- real eye angles -- a live disturbance our
+                                -- "angle" Lerp above has no idea happened,
+                                -- so it fights to slowly recover FROM that
+                                -- kicked angle back toward the pre-recorded
+                                -- target, instead of the shot's normal
+                                -- snappy recoil recovery. Snap for a brief
+                                -- window after every shot, not just weapon
+                                -- switches, so the Lerp doesn't inherit it.
+                                recorder.KC_AngleSnapUntil = CurTime() + 0.3
                                 ForceGunSoundAuto(wep)
                             end
                         end
@@ -805,6 +816,12 @@ RegisterData("shot", {
                 KC_BroadcastReloadState(pl, false)
             end
             pl:DoAttackEvent()
+            -- Same recoil-kick concern as "weapon"'s own DoAttackEvent()
+            -- call above -- snap the camera through the kill shot's kick
+            -- instead of letting the "angle" Lerp fight to recover from it.
+            if recorder then
+                recorder.KC_AngleSnapUntil = CurTime() + 0.3
+            end
             ForceGunSoundAuto(pl:GetActiveWeapon())
         end
     end,
