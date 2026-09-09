@@ -547,6 +547,31 @@ RegisterData("weapon", {
                             -- instantly.
                             timer.Simple(0.15, function()
                                 if not IsValid(pl) or not recorder then return end
+                                -- The killcam itself can end within this
+                                -- 0.15s window (short remaining footage,
+                                -- round transition, etc.) -- without this
+                                -- check, this fires AFTER control has
+                                -- already returned to the player and forces
+                                -- the reload pose onto their REAL, live
+                                -- viewmodel instead of the replay's.
+                                if not KC_Playing() or not KC_isKiller(pl) then return end
+                                -- The reload state (KC_ReloadActive/VMSeq)
+                                -- was never tied to WHICH weapon it belongs
+                                -- to -- if the player switched weapons
+                                -- during this 0.15s delay (or later, during
+                                -- the reassertion loop below), applying it
+                                -- forces a bogus reload pose onto whatever
+                                -- DIFFERENT, fully-loaded weapon is now
+                                -- active, since sequence numbers are
+                                -- per-model and happen to overlap. Bail out
+                                -- if the weapon has already changed by the
+                                -- time this fires, and remember which
+                                -- weapon this reload belongs to so the
+                                -- per-tick reassertion loop can do the same
+                                -- check going forward.
+                                local curWep = pl:GetActiveWeapon()
+                                if not IsValid(curWep) or curWep:GetClass() ~= weptbl[1] then return end
+                                recorder.KC_ReloadWeaponClass = weptbl[1]
                                 recorder.KC_ReloadHoldClip1 = prevWeapon[2]
                                 recorder.KC_ReloadHoldClip2 = prevWeapon[3]
                                 -- 7th attempt: SERVER-side ResetSequence
@@ -641,6 +666,18 @@ RegisterData("weapon", {
                         -- same as it would for a real player -- and a
                         -- later reload press still starts a fresh one
                         -- normally).
+                        if recorder.KC_ReloadActive and recorder.KC_ReloadWeaponClass and recorder.KC_ReloadWeaponClass ~= weptbl[1] then
+                            -- The weapon changed while this reload was
+                            -- still active -- forcing its sequence number
+                            -- onto a DIFFERENT weapon's viewmodel is
+                            -- meaningless at best (wrong pose) and at worst
+                            -- coincidentally matches a real sequence on the
+                            -- new model, forcing a bogus reload animation
+                            -- on a weapon that's actually fully loaded.
+                            -- Cancel outright rather than reasserting.
+                            recorder.KC_ReloadActive = false
+                            KC_BroadcastReloadState(pl, false)
+                        end
                         if recorder.KC_ReloadActive and recorder.KC_ReloadVMSeq then
                             local vmForce = pl:GetViewModel()
                             if IsValid(vmForce) then
