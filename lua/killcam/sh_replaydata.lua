@@ -968,8 +968,29 @@ RegisterData("weapon", {
                             -- previous tick's frame so the one-tick-lagged
                             -- clip decrease is still recognized as part of
                             -- the same kill shot.
-                            local frame = recorder:GetFrame(tick)
-                            local prevFrame = recorder:GetFrame(tick - 1)
+                            --
+                            -- 23rd attempt: this NEVER actually engaged --
+                            -- confirmed by a live log where the "shot"
+                            -- handler's own kill-fire print (below) never
+                            -- appeared even though the kill visibly landed.
+                            -- recorder:GetFrame(id) returns self.frames[id],
+                            -- the LIVE recording ring buffer -- but that
+                            -- buffer keeps shifting every tick (CaptureFrame
+                            -- runs on every StartCommand until KC_Playing()
+                            -- actually goes true, well after the kill, for
+                            -- the round-end/floater sequencing delay) so by
+                            -- the time replay starts, whatever index SetKill
+                            -- tagged has long since shifted out of relevance
+                            -- relative to the replay's own tick numbering
+                            -- (which restarts at 1). The frozen data actually
+                            -- being replayed lives in self.replay_frames --
+                            -- PlayFrame() itself already scans THAT table
+                            -- for killframeID, and this same function's own
+                            -- reload-trigger code above already correctly
+                            -- reads recorder.replay_frames[tick] instead of
+                            -- GetFrame(). Match that here.
+                            local frame = recorder.replay_frames[tick]
+                            local prevFrame = recorder.replay_frames[tick - 1]
                             if not ((frame and frame.kill) or (prevFrame and prevFrame.kill)) then
                                 -- DIAGNOSTIC (21st attempt): confirms whether
                                 -- this is still double-firing a fraction of
@@ -1029,7 +1050,18 @@ RegisterData("shot", {
     clientside = false,
     Get = function() return false end,
     Set = function(pl, cmd)
-        if pl.KC_Recorder:GetFrame(KC_ServerTick()).kill then
+        -- 23rd attempt: GetFrame() reads the live recording ring buffer
+        -- (self.frames), which keeps shifting every tick right up until
+        -- replay actually starts -- by then whatever index SetKill tagged
+        -- no longer lines up with the replay's own tick numbering, so this
+        -- check was NEVER true (confirmed live: this handler's kill-fire
+        -- print never appeared even on a confirmed kill). The frozen replay
+        -- data lives in self.replay_frames -- read that instead, matching
+        -- "weapon"'s own kill-check fix above and PlayFrame()'s killframeID
+        -- scan, which both already use replay_frames.
+        local recorder = pl.KC_Recorder
+        local curFrame = recorder.replay_frames[KC_ServerTick()]
+        if curFrame and curFrame.kill then
             -- The kill shot cancels an in-progress reload display just
             -- like any other shot ("weapon"'s own shot detection above
             -- already does this) -- without clearing KC_ReloadActive
@@ -1041,7 +1073,6 @@ RegisterData("shot", {
             -- "reload" -- making the pre-kill reload look like it never
             -- got cancelled, and confusing it with any genuinely new
             -- reload trigger shortly after.
-            local recorder = pl.KC_Recorder
             if recorder and recorder.KC_ReloadActive then
                 recorder.KC_ReloadActive = false
                 KC_BroadcastReloadState(pl, false)
