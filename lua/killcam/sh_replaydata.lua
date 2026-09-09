@@ -307,22 +307,38 @@ RegisterData("angle", {
     clientside = true,
     Get = function(pl, _) return pl:EyeAngles() end,
     Set = function(pl, cmd, angle)
-        -- TEMPORARILY DISABLED for testing -- suspected of causing a
-        -- visible camera "swing" through intermediate angles during fast
-        -- weapon-switch/combo actions, since it smooths toward the
-        -- recorded angle instead of snapping straight to it. Uncomment
-        -- the block below and remove the direct SetViewAngles line to
-        -- restore the smoothing.
-        cmd:SetViewAngles(angle)
-        --[[
-        if pl.KILLCAM_StartDataInitiated then
+        -- Confirmed by testing: disabling the Lerp entirely fixes the
+        -- weird camera swing during a NAC (a shotgun reload cancelled
+        -- into a weapon switch) but makes normal trickshot camera motion
+        -- look choppy -- the Lerp itself is wanted, it just needs to get
+        -- out of the way specifically during a weapon switch. Detect a
+        -- real weapon-class change in the RECORDED data (same signal
+        -- "weapon"'s own edge detection above already uses) and snap
+        -- straight to the recorded angle for a short window starting
+        -- there, instead of just the one tick the switch happens on --
+        -- the switch's own view movement can span a few ticks, and
+        -- letting Lerp resume partway through it would reintroduce the
+        -- same visible swing.
+        local recorder = pl.KC_Recorder
+        local tick = KC_ServerTick and KC_ServerTick()
+        if recorder and tick and tick > 1 then
+            local prevFrame = recorder.replay_frames[tick - 1]
+            local curFrame  = recorder.replay_frames[tick]
+            local prevWeapon = prevFrame and prevFrame.weapon
+            local curWeapon  = curFrame and curFrame.weapon
+            if prevWeapon and curWeapon and prevWeapon[1] ~= curWeapon[1] then
+                recorder.KC_AngleSnapUntil = CurTime() + 0.3
+            end
+        end
+        local snapping = recorder and recorder.KC_AngleSnapUntil and CurTime() < recorder.KC_AngleSnapUntil
+
+        if pl.KILLCAM_StartDataInitiated and not snapping then
             local ang = LerpAngle(FrameTime() / engine.ServerFrameTime() * 0.125, pl:EyeAngles(), angle)
             ang.r = 0
             cmd:SetViewAngles(ang)
         else
             cmd:SetViewAngles(angle)
         end
-        ]]
     end,
 })
 
