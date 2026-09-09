@@ -492,6 +492,20 @@ RegisterData("weapon", {
                         local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
                         local sinceSwitch = recorder.KC_LastWeaponSwitchTime and (CurTime() - recorder.KC_LastWeaponSwitchTime) or -1
                         local justSwitched = sinceSwitch >= 0 and sinceSwitch < 0.15
+                        -- A live log caught TWO separate IN_RELOAD rising
+                        -- edges for the SAME weapon only ~0.4s apart --
+                        -- the same class of recording noise already
+                        -- confirmed for this exact button bit (3 edges
+                        -- for 2 real reloads elsewhere in this file).
+                        -- With no guard against a second trigger while a
+                        -- reload for this SAME weapon is already active,
+                        -- the second one restarted the whole animation
+                        -- from scratch mid-playback -- reading exactly
+                        -- like the weapon being drawn/reloaded twice.
+                        -- A real player can't finish, then genuinely
+                        -- restart, a multi-second bolt-action reload in
+                        -- under half a second.
+                        local alreadyReloadingThis = recorder.KC_ReloadActive and recorder.KC_ReloadWeaponClass == weptbl[1]
                         if isReloading and not wasReloading then
                             -- DIAGNOSTIC: print the raw gap every time,
                             -- regardless of whether the 0.15s threshold
@@ -502,9 +516,10 @@ RegisterData("weapon", {
                             -- threshold blind.
                             print("[KC Reload] edge for " .. pl:Nick() .. " weapon=" .. tostring(weptbl[1]) ..
                                 " -- " .. string.format("%.3f", sinceSwitch) .. "s since last weapon switch" ..
-                                (justSwitched and " (IGNORED, too soon)" or ""))
+                                (justSwitched and " (IGNORED, too soon after switch)" or "") ..
+                                (alreadyReloadingThis and " (IGNORED, already mid-reload on this weapon)" or ""))
                         end
-                        if isReloading and not wasReloading and not justSwitched then
+                        if isReloading and not wasReloading and not justSwitched and not alreadyReloadingThis then
                             -- 4th attempt: SendWeaponAnim(ACT_VM_RELOAD) on
                             -- the weapon confirmed FIRING every time
                             -- (server-side log proof), yet a spectator
