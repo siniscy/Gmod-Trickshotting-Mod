@@ -617,10 +617,43 @@ RegisterData("weapon", {
                             -- moment to settle before cutting to the
                             -- reload pose instead of colliding with it
                             -- instantly.
-                            timer.Simple(0.15, function()
+                            --
+                            -- 24th attempt: a flat 0.15s guess isn't long
+                            -- enough for every weapon -- confirmed live that
+                            -- the kill-frame double-fire bug (23rd attempt)
+                            -- is now actually fixed (the diagnostic prints
+                            -- show the correct fire-once/skip-duplicate
+                            -- behavior), yet the "bob" persisted on a kill
+                            -- immediately followed by a genuine reload
+                            -- press, meaning this fixed delay is still
+                            -- cutting the reload in while DoAttackEvent()'s
+                            -- own kill-shot recoil/fire sequence (a
+                            -- dramatic, possibly long animation for some
+                            -- weapons, e.g. a bolt-action sniper) is still
+                            -- playing. Instead of guessing a constant,
+                            -- measure how much time is ACTUALLY left on
+                            -- whatever sequence is currently playing on the
+                            -- viewmodel right now and wait exactly that
+                            -- long -- event-driven off the animation's own
+                            -- state instead of an arbitrary number, so it
+                            -- adapts per-weapon instead of being tuned for
+                            -- one gun and wrong for another.
+                            local reloadDelay = 0
+                            local vmNow = pl:GetViewModel()
+                            if IsValid(vmNow) then
+                                local curSeq  = vmNow:GetSequence()
+                                local curDur  = vmNow:SequenceDuration(curSeq)
+                                local curCyc  = vmNow:GetCycle()
+                                if curDur and curDur > 0 and curCyc then
+                                    reloadDelay = math.Clamp(curDur * (1 - curCyc), 0, curDur)
+                                end
+                            end
+                            print("[KC Reload] delaying reload cut by " .. string.format("%.3f", reloadDelay) ..
+                                "s to let the current viewmodel sequence finish for " .. pl:Nick())
+                            timer.Simple(reloadDelay, function()
                                 if not IsValid(pl) or not recorder then return end
                                 -- The killcam itself can end within this
-                                -- 0.15s window (short remaining footage,
+                                -- delay window (short remaining footage,
                                 -- round transition, etc.) -- without this
                                 -- check, this fires AFTER control has
                                 -- already returned to the player and forces
