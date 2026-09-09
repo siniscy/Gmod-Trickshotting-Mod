@@ -361,7 +361,18 @@ RegisterData("angle", {
         -- bundled with the failed camera-snap-on-every-shot experiment
         -- (which broke normal smoothness) and reverted along with it
         -- without ever being tested on its own -- trying it in isolation.
-        pl:SetViewPunchAngle(Angle(0, 0, 0))
+        --
+        -- CORRECTION: "SetViewPunchAngle" isn't a real Player method --
+        -- confirmed by a live Lua error firing on literally every single
+        -- tick of every replay since this was added ("attempt to call
+        -- method 'SetViewPunchAngle' (a nil value)"). Worse than just not
+        -- working: an uncaught error partway through Killcam.SetData()'s
+        -- pairs() loop can abort the REST of that tick's data types
+        -- entirely, meaning whichever RegisterData types happened to run
+        -- after "angle" that tick (weapon/reload included) may have been
+        -- silently skipped this whole time. The real function is
+        -- Player:ViewPunchReset(), which fully clears the punch angle.
+        pl:ViewPunchReset()
     end,
 })
 
