@@ -307,52 +307,42 @@ RegisterData("angle", {
     clientside = true,
     Get = function(pl, _) return pl:EyeAngles() end,
     Set = function(pl, cmd, angle)
-        -- Confirmed by testing: disabling the Lerp entirely fixes the
-        -- weird camera swing during a NAC (a shotgun reload cancelled
-        -- into a weapon switch) but makes normal trickshot camera motion
-        -- look choppy -- the Lerp itself is wanted, it just needs to get
-        -- out of the way specifically during a weapon switch. Detect a
-        -- real weapon-class change in the RECORDED data (same signal
-        -- "weapon"'s own edge detection above already uses) and snap
-        -- straight to the recorded angle for a short window starting
-        -- there, instead of just the one tick the switch happens on --
-        -- the switch's own view movement can span a few ticks, and
-        -- letting Lerp resume partway through it would reintroduce the
-        -- same visible swing.
+        -- Two failed attempts so far (weapon-switch-triggered snap, then
+        -- also snapping on every shot + zeroing view punch) -- neither
+        -- fixed the NAC pull-back, and snapping on every shot broke the
+        -- Lerp's smoothness for normal trickshotting (a trick usually
+        -- involves more than one shot, so most of the replay ended up
+        -- snapping instead of smoothing). Both were guesses at WHY the
+        -- Lerp misbehaves without evidence for what's actually happening
+        -- to the angle data itself. Back to the original, confirmed-
+        -- smooth Lerp, with a diagnostic instead of another guess: log
+        -- the actual recorded angle whenever it jumps by a large amount
+        -- in a single tick, so the next fix targets what's really in the
+        -- recording during a NAC instead of guessing at engine mechanics.
         local recorder = pl.KC_Recorder
-        local tick = KC_ServerTick and KC_ServerTick()
-        if recorder and tick and tick > 1 then
-            local prevFrame = recorder.replay_frames[tick - 1]
-            local curFrame  = recorder.replay_frames[tick]
-            local prevWeapon = prevFrame and prevFrame.weapon
-            local curWeapon  = curFrame and curFrame.weapon
-            if prevWeapon and curWeapon and prevWeapon[1] ~= curWeapon[1] then
-                recorder.KC_AngleSnapUntil = CurTime() + 0.3
+        if recorder then
+            local lastAngle = recorder.KC_LastRecordedAngle
+            if lastAngle then
+                local delta = math.max(
+                    math.abs(math.AngleDifference(angle.y, lastAngle.y)),
+                    math.abs(math.AngleDifference(angle.p, lastAngle.p))
+                )
+                if delta > 20 then
+                    print("[KC Angle DEBUG] recorded angle jumped " .. string.format("%.1f", delta) ..
+                        " degrees in one tick for " .. pl:Nick() ..
+                        " (from " .. tostring(lastAngle) .. " to " .. tostring(angle) .. ")")
+                end
             end
+            recorder.KC_LastRecordedAngle = angle
         end
-        local snapping = recorder and recorder.KC_AngleSnapUntil and CurTime() < recorder.KC_AngleSnapUntil
 
-        if pl.KILLCAM_StartDataInitiated and not snapping then
+        if pl.KILLCAM_StartDataInitiated then
             local ang = LerpAngle(FrameTime() / engine.ServerFrameTime() * 0.125, pl:EyeAngles(), angle)
             ang.r = 0
             cmd:SetViewAngles(ang)
         else
             cmd:SetViewAngles(angle)
         end
-
-        -- The angle-snap window (above) still didn't fix the post-shot
-        -- pull-back -- view punch is a SEPARATE mechanic from EyeAngles()/
-        -- SetViewAngles() entirely: TFA Base's recoil calls
-        -- owner:ViewPunch(), which adds a rotational offset on top of the
-        -- eye angles that the ENGINE ITSELF decays back to zero over
-        -- roughly a second, independent of anything cmd:SetViewAngles()
-        -- does. Neither the Lerp nor the snap above ever touched it,
-        -- which is exactly why forcing the angle didn't stop the visible
-        -- kick-then-crawl-back -- that motion was the punch decaying on
-        -- its own schedule, layered on top of whatever angle we set.
-        -- Zero it every tick during replay so nothing but our own forced
-        -- angle ever affects the killer's view.
-        pl:SetViewPunchAngle(Angle(0, 0, 0))
     end,
 })
 
@@ -759,17 +749,6 @@ RegisterData("weapon", {
                             local frame = recorder:GetFrame(tick)
                             if not (frame and frame.kill) then
                                 pl:DoAttackEvent()
-                                -- DoAttackEvent() triggers TFA Base's own
-                                -- recoil kick (ViewPunch) on the killer's
-                                -- real eye angles -- a live disturbance our
-                                -- "angle" Lerp above has no idea happened,
-                                -- so it fights to slowly recover FROM that
-                                -- kicked angle back toward the pre-recorded
-                                -- target, instead of the shot's normal
-                                -- snappy recoil recovery. Snap for a brief
-                                -- window after every shot, not just weapon
-                                -- switches, so the Lerp doesn't inherit it.
-                                recorder.KC_AngleSnapUntil = CurTime() + 0.3
                                 ForceGunSoundAuto(wep)
                             end
                         end
@@ -830,12 +809,6 @@ RegisterData("shot", {
                 KC_BroadcastReloadState(pl, false)
             end
             pl:DoAttackEvent()
-            -- Same recoil-kick concern as "weapon"'s own DoAttackEvent()
-            -- call above -- snap the camera through the kill shot's kick
-            -- instead of letting the "angle" Lerp fight to recover from it.
-            if recorder then
-                recorder.KC_AngleSnapUntil = CurTime() + 0.3
-            end
             ForceGunSoundAuto(pl:GetActiveWeapon())
         end
     end,
