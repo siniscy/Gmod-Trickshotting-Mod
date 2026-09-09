@@ -944,8 +944,23 @@ RegisterData("weapon", {
                             local frame = recorder:GetFrame(tick)
                             local prevFrame = recorder:GetFrame(tick - 1)
                             if not ((frame and frame.kill) or (prevFrame and prevFrame.kill)) then
+                                -- DIAGNOSTIC (21st attempt): confirms whether
+                                -- this is still double-firing a fraction of
+                                -- a second after the kill's own "shot"-type
+                                -- DoAttackEvent (printed below) -- if these
+                                -- two prints appear one tick apart around a
+                                -- kill, the fix didn't fully close the gap;
+                                -- if this print never appears near a kill at
+                                -- all, the bob is coming from somewhere else
+                                -- entirely.
+                                print("[KC Shot DEBUG] weapon-handler fired DoAttackEvent at tick=" ..
+                                    tostring(tick) .. " for " .. pl:Nick() .. " (clip " ..
+                                    tostring(prevWeapon[2]) .. "->" .. tostring(weptbl[2]) .. ")")
                                 pl:DoAttackEvent()
                                 ForceGunSoundAuto(wep)
+                            else
+                                print("[KC Shot DEBUG] weapon-handler SKIPPED DoAttackEvent at tick=" ..
+                                    tostring(tick) .. " for " .. pl:Nick() .. " (kill frame or prev-tick kill frame)")
                             end
                         end
                     end
@@ -1004,6 +1019,12 @@ RegisterData("shot", {
                 recorder.KC_ReloadActive = false
                 KC_BroadcastReloadState(pl, false)
             end
+            -- DIAGNOSTIC (21st attempt): pair this with the "weapon-handler
+            -- fired/SKIPPED" prints above -- if this fires at tick T and
+            -- weapon-handler ALSO fires (not skips) at tick T or T+1, the
+            -- double-fire is still slipping through.
+            print("[KC Shot DEBUG] shot-handler fired DoAttackEvent (kill) at tick=" ..
+                tostring(KC_ServerTick()) .. " for " .. pl:Nick())
             pl:DoAttackEvent()
             ForceGunSoundAuto(pl:GetActiveWeapon())
         end
