@@ -422,6 +422,24 @@ RegisterData("weapon", {
                     local prevFrame  = recorder.replay_frames[tick - 1]
                     local curFrame   = recorder.replay_frames[tick]
                     local prevWeapon = prevFrame and prevFrame.weapon
+                    -- A live log caught a reload edge firing on a sniper
+                    -- immediately after a NAC switched to it from a
+                    -- shotgun -- a bolt-action reload's dramatic
+                    -- pull-back-and-cycle animation matches exactly what
+                    -- looked like an unnatural camera glitch in the
+                    -- screenshots, but it was never the camera at all: it
+                    -- was our OWN reload-forcing code misfiring on the
+                    -- newly-drawn weapon, almost certainly from the same
+                    -- already-confirmed IN_RELOAD button-recording noise
+                    -- (bleeding over right at the switch) that previously
+                    -- caused reload to fire 3x for 2 real reloads. Track
+                    -- when a weapon switch was last seen so the edge
+                    -- trigger below can ignore one landing implausibly
+                    -- soon after -- a real player can't reload a weapon
+                    -- before its draw animation even finishes.
+                    if prevWeapon and prevWeapon[1] ~= weptbl[1] then
+                        recorder.KC_LastWeaponSwitchTime = CurTime()
+                    end
                     if prevWeapon and prevWeapon[1] == weptbl[1] and weptbl[2] and prevWeapon[2] then
                         -- 3rd attempt: every clip-delta heuristic (any
                         -- increase, then "must reach max clip", then that
@@ -442,7 +460,15 @@ RegisterData("weapon", {
                         local curButtons  = curFrame and curFrame.buttons
                         local wasReloading = prevButtons and bit.band(prevButtons, IN_RELOAD) ~= 0
                         local isReloading  = curButtons and bit.band(curButtons, IN_RELOAD) ~= 0
-                        if isReloading and not wasReloading then
+                        local justSwitched = recorder.KC_LastWeaponSwitchTime and (CurTime() - recorder.KC_LastWeaponSwitchTime) < 0.15
+                        if isReloading and not wasReloading and justSwitched then
+                            print("[KC Reload] IGNORED a reload edge " ..
+                                string.format("%.3f", CurTime() - recorder.KC_LastWeaponSwitchTime) ..
+                                "s after a weapon switch for " .. pl:Nick() ..
+                                " weapon=" .. tostring(weptbl[1]) ..
+                                " -- too soon after the switch to be a real reload, treating as button-recording noise")
+                        end
+                        if isReloading and not wasReloading and not justSwitched then
                             -- 4th attempt: SendWeaponAnim(ACT_VM_RELOAD) on
                             -- the weapon confirmed FIRING every time
                             -- (server-side log proof), yet a spectator
