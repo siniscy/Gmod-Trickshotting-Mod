@@ -912,8 +912,38 @@ RegisterData("weapon", {
                             -- ForceGunSoundAuto() ran unconditionally right
                             -- after, so every kill played the gunshot sound
                             -- twice. Skip both together.
+                            --
+                            -- 21st attempt: checking only the CURRENT tick's
+                            -- .kill flag isn't enough. Clip1() is sampled in
+                            -- this same Get() function, which runs on
+                            -- StartCommand -- BEFORE the tick's own weapon
+                            -- fire is simulated. SetKill() (sh_recorder.lua)
+                            -- tags .kill on the CURRENT frame later in that
+                            -- same tick's simulation, once the shot has
+                            -- already landed and killed -- so the kill tag
+                            -- lands on the frame with PRE-shot ammo, while
+                            -- the clip decrease itself only becomes visible
+                            -- one recorded frame later. During replay this
+                            -- reads as: tick N has .kill set (correctly
+                            -- fires "shot"'s own DoAttackEvent), then tick
+                            -- N+1 sees the ammo finally drop with no .kill
+                            -- flag on ITS frame, and this code treated that
+                            -- as a brand new real shot -- firing a second,
+                            -- spurious DoAttackEvent()/ForceGunSoundAuto()
+                            -- exactly one tick after the real one. Being
+                            -- server-side, this replicated identically to
+                            -- the killer and every spectator, matching the
+                            -- "same problem on the non-winning player's
+                            -- screen too" report -- and explains why every
+                            -- reload-focused diagnostic came back clean,
+                            -- since this double-fire has nothing to do with
+                            -- reload detection at all. Also check the
+                            -- previous tick's frame so the one-tick-lagged
+                            -- clip decrease is still recognized as part of
+                            -- the same kill shot.
                             local frame = recorder:GetFrame(tick)
-                            if not (frame and frame.kill) then
+                            local prevFrame = recorder:GetFrame(tick - 1)
+                            if not ((frame and frame.kill) or (prevFrame and prevFrame.kill)) then
                                 pl:DoAttackEvent()
                                 ForceGunSoundAuto(wep)
                             end
