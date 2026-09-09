@@ -347,6 +347,21 @@ RegisterData("angle", {
         else
             cmd:SetViewAngles(angle)
         end
+
+        -- 17th attempt, isolated this time: view punch is a completely
+        -- separate mechanic from EyeAngles()/SetViewAngles() -- TFA
+        -- Base's recoil calls owner:ViewPunch(), adding a rotational
+        -- offset on top of the eye angles that the ENGINE ITSELF decays
+        -- back to zero over about a second, independent of anything set
+        -- above. User confirmed the "jumps up and out of frame after
+        -- shooting" happens with every weapon, not just this one bolt-
+        -- action sniper -- ruling out a per-weapon reload animation and
+        -- pointing at something universal to firing, which punch is and
+        -- a per-weapon reload pose isn't. This was tried once before but
+        -- bundled with the failed camera-snap-on-every-shot experiment
+        -- (which broke normal smoothness) and reverted along with it
+        -- without ever being tested on its own -- trying it in isolation.
+        pl:SetViewPunchAngle(Angle(0, 0, 0))
     end,
 })
 
