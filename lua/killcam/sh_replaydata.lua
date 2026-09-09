@@ -339,6 +339,20 @@ RegisterData("angle", {
         else
             cmd:SetViewAngles(angle)
         end
+
+        -- The angle-snap window (above) still didn't fix the post-shot
+        -- pull-back -- view punch is a SEPARATE mechanic from EyeAngles()/
+        -- SetViewAngles() entirely: TFA Base's recoil calls
+        -- owner:ViewPunch(), which adds a rotational offset on top of the
+        -- eye angles that the ENGINE ITSELF decays back to zero over
+        -- roughly a second, independent of anything cmd:SetViewAngles()
+        -- does. Neither the Lerp nor the snap above ever touched it,
+        -- which is exactly why forcing the angle didn't stop the visible
+        -- kick-then-crawl-back -- that motion was the punch decaying on
+        -- its own schedule, layered on top of whatever angle we set.
+        -- Zero it every tick during replay so nothing but our own forced
+        -- angle ever affects the killer's view.
+        pl:SetViewPunchAngle(Angle(0, 0, 0))
     end,
 })
 
