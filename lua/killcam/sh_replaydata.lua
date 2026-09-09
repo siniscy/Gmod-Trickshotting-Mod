@@ -137,7 +137,11 @@ if CLIENT then
             local vm = pl:GetViewModel()
             if not IsValid(vm) then continue end
             if vm:GetSequence() ~= data.seq then
-                vm:ResetSequence(data.seq)
+                -- SetSequence (not ResetSequence) -- ResetSequence forces
+                -- an instant, unblended hard cut by design in Source;
+                -- SetSequence lets the engine's normal animation blending
+                -- smooth the transition from whatever pose it was in.
+                vm:SetSequence(data.seq)
             end
             local dur     = vm:SequenceDuration(data.seq)
             local elapsed = CurTime() - data.startTime
@@ -585,7 +589,22 @@ RegisterData("weapon", {
                                 if IsValid(vm) then
                                     local seq = vm:SelectWeightedSequence(ACT_VM_RELOAD)
                                     if seq and seq >= 0 then
-                                        vm:ResetSequence(seq)
+                                        -- 16th attempt: user confirmed the
+                                        -- reload press is genuine and the
+                                        -- 0.15s pre-delay (15th attempt)
+                                        -- didn't help -- the delay only
+                                        -- moved WHEN the cut happens, not
+                                        -- how abrupt it is. ResetSequence()
+                                        -- is documented to force an
+                                        -- instant, unblended hard reset;
+                                        -- SetSequence() (still followed by
+                                        -- our own SetCycle/PlaybackRate
+                                        -- control) lets the engine's normal
+                                        -- animation blending smooth the
+                                        -- transition from whatever pose
+                                        -- the recoil left it in, instead of
+                                        -- an abrupt snap.
+                                        vm:SetSequence(seq)
                                         vm:SetCycle(0)
                                         vm:SetPlaybackRate(1)
                                         -- 10th attempt: a ONE-TIME ResetSequence
@@ -697,7 +716,9 @@ RegisterData("weapon", {
                                         " (" .. tostring(vmForce:GetSequenceName(vmForce:GetSequence())) ..
                                         "), forcing back to " .. tostring(recorder.KC_ReloadVMSeq) ..
                                         " (" .. tostring(vmForce:GetSequenceName(recorder.KC_ReloadVMSeq)) .. ")")
-                                    vmForce:ResetSequence(recorder.KC_ReloadVMSeq)
+                                    -- SetSequence, not ResetSequence -- see
+                                    -- the 16th attempt comment above.
+                                    vmForce:SetSequence(recorder.KC_ReloadVMSeq)
                                 end
                                 vmForce:SetCycle(cyc)
                                 vmForce:SetPlaybackRate(1)
