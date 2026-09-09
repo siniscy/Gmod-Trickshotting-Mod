@@ -746,7 +746,6 @@ RegisterData("weapon", {
                             if IsValid(vmForce) then
                                 local dur = recorder.KC_ReloadSeqDuration
                                 local elapsed = CurTime() - (recorder.KC_ReloadStartTime or CurTime())
-                                local cyc = (dur and dur > 0) and math.Clamp(elapsed / dur, 0, 1) or 0
                                 if vmForce:GetSequence() ~= recorder.KC_ReloadVMSeq then
                                     -- DIAGNOSTIC: proves something else is
                                     -- still actively overwriting the
@@ -763,9 +762,28 @@ RegisterData("weapon", {
                                     -- SetSequence, not ResetSequence -- see
                                     -- the 16th attempt comment above.
                                     vmForce:SetSequence(recorder.KC_ReloadVMSeq)
+                                    -- 19th attempt: only set cycle/playback
+                                    -- rate HERE, when correcting a drifted
+                                    -- sequence -- not unconditionally every
+                                    -- single tick like before. Every test
+                                    -- so far came back completely clean on
+                                    -- every diagnostic (no fight, no wrong
+                                    -- weapon, no double edge) yet the
+                                    -- glitch still happened -- pointing at
+                                    -- our OWN per-tick cycle override as a
+                                    -- source of jitter in its own right,
+                                    -- since it has no reason to line up
+                                    -- with the engine's native frame-to-
+                                    -- frame interpolation. Let the engine's
+                                    -- own normal per-tick cycle advancement
+                                    -- (driven by SetPlaybackRate alone)
+                                    -- run untouched once set, instead of
+                                    -- us recomputing and overriding it
+                                    -- every tick regardless.
+                                    local cyc = (dur and dur > 0) and math.Clamp(elapsed / dur, 0, 1) or 0
+                                    vmForce:SetCycle(cyc)
+                                    vmForce:SetPlaybackRate(1)
                                 end
-                                vmForce:SetCycle(cyc)
-                                vmForce:SetPlaybackRate(1)
                                 if dur and dur > 0 and elapsed >= dur then
                                     -- Finished playing naturally -- stop
                                     -- holding it, real clip/sequence data
