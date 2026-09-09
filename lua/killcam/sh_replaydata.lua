@@ -307,6 +307,14 @@ RegisterData("angle", {
     clientside = true,
     Get = function(pl, _) return pl:EyeAngles() end,
     Set = function(pl, cmd, angle)
+        -- TEMPORARILY DISABLED for testing -- suspected of causing a
+        -- visible camera "swing" through intermediate angles during fast
+        -- weapon-switch/combo actions, since it smooths toward the
+        -- recorded angle instead of snapping straight to it. Uncomment
+        -- the block below and remove the direct SetViewAngles line to
+        -- restore the smoothing.
+        cmd:SetViewAngles(angle)
+        --[[
         if pl.KILLCAM_StartDataInitiated then
             local ang = LerpAngle(FrameTime() / engine.ServerFrameTime() * 0.125, pl:EyeAngles(), angle)
             ang.r = 0
@@ -314,6 +322,7 @@ RegisterData("angle", {
         else
             cmd:SetViewAngles(angle)
         end
+        ]]
     end,
 })
 
