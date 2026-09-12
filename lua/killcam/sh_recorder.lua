@@ -30,19 +30,9 @@ end
 
 function recObj:SetKill(npc)
     self:GetCurrentFrame().kill = npc:EntIndex()
-    -- How long recording keeps running AFTER the kill before the buffer is
-    -- frozen for replay -- this is the hard ceiling on how much "after the
-    -- kill" footage killcam can ever show (the recorded buffer is a fixed
-    -- ~10s window total; whatever isn't spent after the kill is spent
-    -- rewound before it). 1s wasn't enough for a reload's animation/sound
-    -- to finish recording at all, so playback always ran out of buffer and
-    -- ended mid-reload -- which is what actually cut the killcam short,
-    -- not anything about round/match transitions. 3s comfortably covers a
-    -- normal reload. (A timer-based reload grace window used to also need
-    -- extra runway here, but that mechanism is gone -- see sh_replaydata.lua
-    -- -- so 3s no longer needs to cover a full reload animation, just
-    -- normal post-kill footage.)
-    self.SaveTimeout = CurTime() + 3
+    -- 1s of post-kill buffer cut reloads/footage short; 5s gives enough
+    -- room for a full reload to play out before the buffer freezes.
+    self.SaveTimeout = CurTime() + 5
     self.KillSaved = false
 end
 
@@ -63,11 +53,10 @@ function recObj:TimeRemaining()
 end
 
 -- TimeRemaining() clamps at 0 and stays there for every frame at or after
--- the kill, so it can't tell the difference between "just hit the shot"
--- and "several seconds into the post-kill footage" -- which is why the
--- slow-mo triggered by TimeRemaining() < 0.5 used to hold all the way
--- through the reload instead of just the moment of impact. This is the
--- unclamped mirror of it: 0 up to the kill, then counts UP afterward.
+-- the kill, so it can't tell "just hit the shot" apart from "seconds into
+-- the post-kill footage". This is the unclamped mirror: 0 up to the kill,
+-- then counts up afterward, used to return to normal speed shortly after
+-- impact instead of holding slow-mo through the whole reload.
 function recObj:TimeSinceKill()
     if not self.killframeID then return 0 end
     local killFrame = self.replay_frames[self.killframeID]
@@ -77,7 +66,8 @@ function recObj:TimeSinceKill()
 end
 
 function recObj:SetReplayFrames(pl_killer)
-    if self.pl == pl_killer then 
+    self.KC_ReplayReloadShown = false
+    if self.pl == pl_killer then
         self.replay_frames = Killcam.CopyTable(self.kc_frames) 
         for i = 1, #self.replay_frames do
             if self.replay_frames[i].kill then

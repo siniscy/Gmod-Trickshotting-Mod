@@ -11,6 +11,9 @@ include("killcam_lang.lua")
 
 if SERVER then
     Killcam.Frames = math.ceil((Killcam.CFG.RecordingTime or 10) * GetConVar("sv_maxcmdrate"):GetInt() + 0.5)
+    -- Stop playback slightly before the buffer's actual end, so killcam
+    -- wraps up a bit sooner instead of always running the full recorded window.
+    Killcam.EndEarlyFrames = math.ceil(2 * GetConVar("sv_maxcmdrate"):GetInt())
 end
 
 local path = "killcam/"

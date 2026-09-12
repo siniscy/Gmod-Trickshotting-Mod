@@ -10,11 +10,7 @@ hook.Add("Think", "Killcam - Frame Handling", function()
     if KC_Playing() and IsValid(KC_GetKiller()) and KC_GetKiller().KC_Recorder then
         local recorder = KC_GetKiller().KC_Recorder
         SetGlobalFloat("Killcam_TimeToKill", recorder:TimeRemaining() or 0)
-        if recorder:TimeSinceKill() >= 0.75 then
-            -- Back to full speed shortly after impact -- TimeRemaining()
-            -- alone can't do this since it clamps at 0 and stays there
-            -- forever after the kill, which is why slow-mo used to hold
-            -- all the way through the reload.
+        if recorder:TimeSinceKill() >= 1 then
             game.SetTimeScale(1)
         elseif recorder:TimeRemaining() < 0.5 then
             game.SetTimeScale(0.3)
@@ -22,7 +18,7 @@ hook.Add("Think", "Killcam - Frame Handling", function()
             game.SetTimeScale(1)
         end
         Killcam.PlayNPCData()
-        if gt() < Killcam.Frames then
+        if gt() < Killcam.Frames - Killcam.EndEarlyFrames then
             st(gt() + 1)
         else
             Killcam.StopPlaying()
@@ -35,43 +31,14 @@ hook.Add("Think", "Killcam - Frame Handling", function()
 end)
 
 function Killcam.StartPlaying(pl)
-    -- Set the Killcam_Playing flag BEFORE running OnKillcamReplayStart
-    -- (which sends the killer a large compressed replay-data blob via
-    -- Killcam.SendFrames). When a remote (non-host) client was the killer,
-    -- that big blob and this small networked global were being sent to
-    -- the same connection back-to-back, and the global update was
-    -- consistently getting lost for that client -- it never once compared
-    -- Killcam_Playing=true afterward, even though the listen-server host
-    -- always saw it fine (their own GetGlobalBool never goes over the
-    -- network at all, so it isn't affected by this ordering). Giving the
-    -- small critical flag a head start in the send queue avoids that.
+    local status = hook.Run("OnKillcamReplayStart", pl) or true
+    if !status then return end
     st(1)
     SetGlobalBool("Killcam_Playing", true)
-    local status = hook.Run("OnKillcamReplayStart", pl) or true
-    if !status then
-        SetGlobalBool("Killcam_Playing", false)
-        return
-    end
     hook.Run("KillcamReplayStarted")
 end
 
 function Killcam.StopPlaying()
-    -- DIAGNOSTIC: the replay has a fixed frame count (Killcam.Frames) --
-    -- if a reload is triggered late enough in the post-kill footage, it
-    -- can still be actively playing when the killcam just runs out of
-    -- frames and ends outright, cutting the animation off with no chance
-    -- for the spectator to ever see it finish (not even the brief flicker
-    -- seen in other cases). This prints whether that's what happened, to
-    -- tell it apart from an actual sequence fight.
-    local killer = KC_GetKiller()
-    if IsValid(killer) and killer.KC_Recorder and killer.KC_Recorder.KC_ReloadActive then
-        local rec = killer.KC_Recorder
-        local remaining = (rec.KC_ReloadSeqDuration or 0) - (CurTime() - (rec.KC_ReloadStartTime or CurTime()))
-        if remaining > 0 then
-            print("[KC Reload VM DEBUG] Killcam ending with " .. string.format("%.2f", remaining) ..
-                "s of reload animation still unfinished -- cut off by the replay running out of frames, not overwritten.")
-        end
-    end
     SetGlobalBool("Killcam_Playing", false)
     hook.Run("KillcamReplayStopped")
 end
