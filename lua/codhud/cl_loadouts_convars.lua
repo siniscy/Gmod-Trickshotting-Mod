@@ -6,11 +6,14 @@
 -- no separate save/network system, and FCVAR_ARCHIVE means the selection
 -- survives both round changes and game restarts with zero extra code.
 
-CreateClientConVar("kc_loadout_mode", "none", true, true,
+-- New players start on the Modern Warfare 2 preset (Intervention + PP2000)
+-- so they spawn with a gun; "none" left them with only their equipment.
+CreateClientConVar("kc_loadout_mode", "default_4", true, true,
     "Selected class: a default_N id, 'custom', or 'none' (manual pickup, no class given)")
 
-CreateClientConVar("kc_custom_primary", "dread_m4", true, true, "Custom class: primary weapon classname")
-CreateClientConVar("kc_custom_secondary", "dread_1911", true, true, "Custom class: secondary weapon classname")
+-- Defaults must be weapons this addon ships, or Custom spawns empty-handed.
+CreateClientConVar("kc_custom_primary", "mw2cr_cheytac", true, true, "Custom class: primary weapon classname")
+CreateClientConVar("kc_custom_secondary", "reha_mw2pp2000", true, true, "Custom class: secondary weapon classname")
 CreateClientConVar("kc_custom_equipment", "kc_equip_knife", true, true, "Custom class: equipment weapon classname")
 
 -- "No Class" gives no weapons (you pick them up in the match) but can still carry one equipment item.

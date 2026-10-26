@@ -439,8 +439,8 @@ Nothing in the live game is moved, respawned or re-simulated. The killcam is pur
 
 | ConVar | Default | Description |
 |---|---|---|
-| `kc_loadout_mode` | `none` | Selected class |
-| `kc_custom_primary` / `_secondary` / `_equipment` | `dread_m4` / `dread_1911` / `kc_equip_knife` | Custom class |
+| `kc_loadout_mode` | `default_4` | Selected class (`default_1`–`default_6`, `custom` or `none`). New players start on Modern Warfare 2. |
+| `kc_custom_primary` / `_secondary` / `_equipment` | `mw2cr_cheytac` / `reha_mw2pp2000` / `kc_equip_knife` | Custom class |
 | `kc_noclass_equipment` | *(empty)* | Equipment for No Class |
 | `kc_instaswap_draw_window` / `_confirm_window` | `0.6` / `1.0` | Instaswap timing |
 | `kc_cod4_knife_stick` | `1` | Knife on R3 |
@@ -508,6 +508,7 @@ lua/
 This project is a **group build**. Everyone below agreed to have their work included here. All code and assets belong to their original authors.
 
 - **reha** (`@rehaiu`): **SteezMod v1b** (save/load position, the MW2/MW3 snipers, reha's weapon bases, hit damage numbers)
+- **Scripts&Maps**: *Garry's Mod Killcam*, which the playercard customizer (`kc_menu`) and the original killcam came from
 - **Call of Duty HUD Collection / Mini DM gamemode**: the HUD this mod is forked from ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3720590485))
 - **KatBug**: *Call of Duty 4: Equipment* (claymore, knife) ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=528146710))
 - **Generic Default, Worshipper, Clavus & Bob**: the Bob's / BO2 weapon bases ([BO2 Weapons Pack](https://steamcommunity.com/sharedfiles/filedetails/?id=299164995))
