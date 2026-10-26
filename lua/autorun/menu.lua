@@ -1,0 +1,18 @@
+CreateConVar("get_sleightofhand", 0, {FCVAR_ARCHIVE, FCVAR_NOTIFY, FCVAR_REPLICATED}, "Enable Sleight Of Hand.", 0, 1)
+CreateConVar("get_reversereload", 0, {FCVAR_ARCHIVE, FCVAR_NOTIFY, FCVAR_REPLICATED}, "Enable Reverse Reload.", 0, 1)
+if CLIENT then
+    hook.Add("PopulateToolMenu", "AddOptions", function()
+        spawnmenu.AddToolMenuOption("Utilities", "SteezMod", "SteezSettings", "Settings", "", "", function(panel)
+            panel:Help("Made by: @rehaiu")
+			panel:Button("Restart the server", "restart")
+			panel:Button("Save Position", "savepos")
+			panel:Button("Load Position", "loadpos")
+			panel:Button("Open Killcam Menu", "kc_menu")
+			panel:Button("Play Killcam", "kc_play")
+			panel:NumSlider("EB (Explosive Bullets)", "eb", 0, 300, 1)
+            panel:CheckBox("Toggle Sleight Of Hand (Needs restart)", "get_sleightofhand")
+			panel:CheckBox("Toggle Reverse Reload (Replaces YY) (Needs restart)", "get_reversereload")
+			panel:CheckBox("Toggle Cowboy (Needs Viewmod addon installed)", "viewmod_enable")
+        end)
+    end)
+end

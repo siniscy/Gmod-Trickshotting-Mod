@@ -80,6 +80,11 @@ Everything is configured through an in-game **Private Match lobby** and the **Co
 - **CoD-style spawns**: you never spawn inside anyone, enemies spawn far away, and teammates spawn together.
 - **Weapon dropping**, a global spread multiplier, explosive bullets (non-Sesh modes only), lerped viewmodels and a third-person hold-type fix.
 
+### 🧰 SteezMod v1b (by reha), built in
+- **Save / load position**: `savepos` saves your spot and `loadpos` teleports you back to it with your momentum cancelled, so you can run the same shot over and over. On a controller, `loadpos` is **RB**.
+- **reha's MW2/MW3 snipers**: the Intervention in every attachment combo (ACOG, Thermal, heartbeat sensor, silencer), the L118A, the Barrett .50 Cal, plus the MW2 M4A1, the M9 and reha's gun, scoped, shotgun and grenade bases.
+- **Floating hit damage numbers**, M9K-style C4 and grenades, and a **SteezMod** panel under Q-menu › Utilities with buttons for save/load position, the killcam menu, a killcam replay, an explosive bullets slider, and the Sleight of Hand, Reverse Reload and Cowboy toggles.
+
 ### 🎮 Native controller support
 - Turn it on with `kc_controller 1`. The pad is read straight from GMod's input system, with **no emulated keyboard keys**, so the cursor never pops mid-spin.
 - Look speed, response curve, deadzones, invert Y and a CoD sprint latch are all adjustable.
@@ -89,29 +94,39 @@ Everything is configured through an in-game **Private Match lobby** and the **Co
 
 ## 📦 Installation
 
-> [!IMPORTANT]
-> **This repo contains the Lua code only.** The `materials/`, `sound/`, `models/` and `resource/` folders (about 1.1 GB of HUD art, announcer audio, fonts and localization) are **not included**, because they come from Call of Duty games and other Workshop authors. Without them, the HUD has missing textures and sounds, and menus show raw localization keys.
+### Option A: full download (recommended)
 
-1. **Clone** the repo into your addons folder:
-   ```bash
-   cd "<Steam>/steamapps/common/GarrysMod/garrysmod/addons"
-   git clone https://github.com/siniscy/Gmod-Trickshotting-Mod.git kc_project
-   ```
-2. **Add the asset folders** (`materials`, `sound`, `models`, `resource`) next to `lua/` in that folder. The original CoD HUD Workshop addon below provides the base HUD art, sounds and localization.
-3. **Subscribe to the recommended Workshop content** for the weapons the preset classes use:
+1. Go to **[Releases](https://github.com/siniscy/Gmod-Trickshotting-Mod/releases/latest)** and download **`Gmod-Trickshotting-Mod.zip`** (about 1.1 GB). It contains everything: the Lua, the HUD art for all six games, the announcer and music, the killcam playercards, fonts, localization, and SteezMod's weapons.
+2. Extract it into `<Steam>/steamapps/common/GarrysMod/garrysmod/addons/`, so you end up with `addons/Gmod-Trickshotting-Mod/lua`, `.../materials` and so on.
+3. Restart Garry's Mod.
 
-   | Addon | Used for |
+### Option B: clone the code (for developers)
+
+The git repo holds the **Lua and localization only**. The `materials/`, `sound/`, `models/` and fonts are too big for git, so they only ship in the Release zip.
+
+```bash
+cd "<Steam>/steamapps/common/GarrysMod/garrysmod/addons"
+git clone https://github.com/siniscy/Gmod-Trickshotting-Mod.git
+```
+
+Then copy `materials/`, `models/`, `sound/` and `resource/fonts/` from the Release zip into the cloned folder.
+
+### Extra weapons (optional)
+
+The Create a Class presets use these Workshop packs. Any weapon you have installed also appears in the class menu under **Other Installed Weapons**.
+
+| Addon | Used for |
    |---|---|
-   | [Call of Duty HUD Collection (Mini DM gamemode)](https://steamcommunity.com/sharedfiles/filedetails/?id=3720590485) | Original HUD this mod is forked from (assets) |
-   | [Call of Duty 4: Equipment](https://steamcommunity.com/sharedfiles/filedetails/?id=528146710) | Knife, claymore and CoD4 equipment |
-   | [Call of Duty: Black Ops II Weapons Pack](https://steamcommunity.com/sharedfiles/filedetails/?id=299164995) | BO2 weapons such as the DSR-50 and KAP-40 |
-   | Dread's and Reha's CoD weapon packs | M4, MP5, Kar98k, Barrett, Intervention, MSR, Striker and SPAS-12 in the class menu |
+| [Call of Duty 4: Equipment](https://steamcommunity.com/sharedfiles/filedetails/?id=528146710) | Knife, claymore and CoD4 equipment |
+| [Call of Duty: Black Ops II Weapons Pack](https://steamcommunity.com/sharedfiles/filedetails/?id=299164995) | BO2 weapons such as the DSR-50 and KAP-40 |
+| Dread's and reha's CoD weapon packs | M4, MP5, Kar98k, Barrett, Intervention, MSR, Striker and SPAS-12 in the class menu |
 
-   Any other weapon you have installed appears in the class menu under **Other Installed Weapons**.
-4. Start a **listen server** (Start New Game, with 2 or more player slots) on a map **with a navmesh** so the bots can path. Run `nav_generate` once on maps that don't have one.
+### Running it
+
+Start a **listen server** (Start New Game, with 2 or more player slots) on a map **with a navmesh** so the bots can path. Run `nav_generate` once on maps that don't have one.
 
 > [!TIP]
-> Don't enable the original *CoD HUD Collection* addon alongside this one. This mod is a fork of it and uses the same `lua/codhud/` file paths, so whichever addon loads last overrides the other's files. Copy its assets in, then disable it.
+> **Unsubscribe from or disable** the original *CoD HUD Collection* and *SteezMod* if you have them. Both are already built in, and keeping a second copy makes the two fight over the same `lua/codhud/` and weapon files.
 
 ---
 
@@ -139,6 +154,9 @@ Everything is configured through an in-game **Private Match lobby** and the **Co
 | `kc_equip` | Quick-switch to **equipment** | Also arms an **instaswap**. Bind it yourself (example below). |
 | `+drop` | **Drop** the active weapon | Allowed when `sv_dropweapon_enablecommand 1`. |
 | `kc_cod4_knife` | **Knife** with CoD4 Equipment weapons | Also on R3 for controllers. |
+| `savepos` | **Save position** | Your trickshot spot |
+| `loadpos` | **Load position** | Teleports you back and cancels your momentum. RB on controller. |
+| `+alt2` / `+alt1` | Save / load position (alternate) | One saved spot shared by all players |
 | `+showscores` (Tab) | CoD scoreboard | Scroll wheel scrolls the scoreboard. |
 | `kc_classmenu` | Open Create a Class | Same as **K**. |
 | `kc_menu` | Killcam **playercard** customizer | Also in the lobby under **Callsign**. |
@@ -152,7 +170,7 @@ Turn on with `kc_controller 1`, or in **CoD HUD Settings › Controller**. Keybo
 
 ```
             LT  Aim                                   RT  Fire
-            LB  Equipment (kc_equip / instaswap)      RB  loadpos
+            LB  Equipment (kc_equip / instaswap)      RB  Load position
      ┌─────────────────────────────────────────────────────────┐
      │   Back: Pause menu                Start: Scoreboard (hold)
      │
@@ -173,7 +191,7 @@ Turn on with `kc_controller 1`, or in **CoD HUD Settings › Controller**. Keybo
 | **X**, **D-pad right** | Reload (tap) |
 | **Y**, **D-pad up** | Weapon switch (`invprev`) |
 | **LB** | Equipment: `kc_equip`, which also performs the instaswap |
-| **RB** | `loadpos`, for save-position addons. It does nothing unless one is installed. |
+| **RB** | `loadpos`: teleport back to your saved position. Save it first with `savepos`. |
 | **L3** | Sprint. One tap keeps you sprinting until you stop or aim (`kc_controller_sprint_latch`). |
 | **R3** | Knife (`kc_cod4_knife_stick`) |
 | **D-pad left** | S&D Set: move bot to crosshair (host) |
@@ -206,6 +224,8 @@ Put this in `garrysmod/cfg/autoexec.cfg` and change the keys to suit you:
 bind "q"      "kc_equip"          // equipment / instaswap
 bind "g"      "+drop"             // drop weapon
 bind "v"      "kc_cod4_knife"     // knife (CoD4 Equipment weapons)
+bind "n"      "savepos"           // save your trickshot spot
+bind "b"      "loadpos"           // teleport back to it
 bind "F3"     "codhud_openmenu"   // CoD HUD settings
 bind "F4"     "kc_menu"           // playercard customizer
 // K = Create a Class and L = S&D Set bot placement work without a bind
@@ -321,6 +341,7 @@ Nothing in the live game is moved, respawned or re-simulated. The killcam is pur
 | `kc_cod4_knife` | Server | Knife with a CoD4 Equipment weapon |
 | `+drop` | Server | Drop the active weapon |
 | `kc_apply_loadout_now` | Server | Re-apply your selected class immediately |
+| `savepos` / `loadpos` | Shared | Save your position / teleport back to it |
 | `codhud_setfaction <faction>` | Server | Join a faction |
 | `sesh_move_bot_to_crosshair` | Server | S&D Set: move a bot to where you're aiming |
 | `sv_dropweapon_blacklist_add <class>` / `_remove` | Server | Edit the drop blacklist |
@@ -427,6 +448,25 @@ Nothing in the live game is moved, respawned or re-simulated. The killcam is pur
 
 </details>
 
+<details>
+<summary><b>SteezMod</b></summary>
+
+| ConVar | Default | Description |
+|---|---|---|
+| `hitnums_enable` | `1` | Show floating damage numbers (client) |
+| `sv_hitnums_show` | `1` | Send damage numbers to players (server) |
+| `sv_hitnums_showalldamage` | `0` | Also show damage that wasn't dealt by a player |
+| `M9KDamageMultiplier` | `1` | Damage multiplier for M9K-style weapons |
+| `M9KDisablePenetration` | `0` | Turn off M9K penetration and ricochets |
+| `M9KDynamicRecoil` | `1` | Recoil moves your aim |
+| `M9KDefaultClip` | `-1` | Clips weapons spawn with (negative = default) |
+| `M9KUniqueSlots` | `1` | Give M9K weapons their own slots |
+| `M9KWeaponStrip` | `0` | Strip empty weapons |
+| `M9KAmmoDetonation` | `1` | Ammo crates can explode |
+| `M9KGasEffect` / `M9KClientGasDisable` | `1` / `0` | Barrel gas effect when shooting |
+
+</details>
+
 ---
 
 ## 🗂️ Project layout
@@ -441,6 +481,8 @@ lua/
 │   ├── sv_wallbang_everything.lua · sv_fastlast.lua · sv_godmode.lua
 │   ├── sh_cod4_knife_stick.lua · sh_cod4_claymore_support.lua
 │   ├── drop_weapon.lua · lerped_viewmodels.lua · sh_bulletspread.lua
+│   ├── SaveLoad.lua · SaveLoad2.lua · menu.lua · sounds.lua   SteezMod
+│   ├── client/ & server/ ..._hitdamagenumbers.lua             SteezMod hit numbers
 │   └── client/cl_kc_controller.lua   native controller layout
 ├── killcam/                 archive-based final killcam
 │   ├── sh_archive.lua           codec, tunables, slow-mo timeline
@@ -463,12 +505,13 @@ lua/
 
 ## 🙏 Credits
 
-This mod builds on work from the Garry's Mod community. All third-party code and assets belong to their original authors.
+This project is a **group build**. Everyone below agreed to have their work included here. All code and assets belong to their original authors.
 
+- **reha** (`@rehaiu`): **SteezMod v1b** (save/load position, the MW2/MW3 snipers, reha's weapon bases, hit damage numbers)
 - **Call of Duty HUD Collection / Mini DM gamemode**: the HUD this mod is forked from ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3720590485))
 - **KatBug**: *Call of Duty 4: Equipment* (claymore, knife) ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=528146710))
 - **Generic Default, Worshipper, Clavus & Bob**: the Bob's / BO2 weapon bases ([BO2 Weapons Pack](https://steamcommunity.com/sharedfiles/filedetails/?id=299164995))
-- **Reha** and **Dread**: the CoD weapon ports used by the preset classes
+- **reha** and **Dread**: the CoD weapon ports used by the preset classes
 - **YuRaNnNzZZ**: *Lerped Viewmodels* and *Drop Weapon*
 - **xpgui** and **Scalar** UI libraries
 - **Activision, Infinity Ward, Treyarch & Sledgehammer Games**: Call of Duty, which this is a fan tribute to
@@ -477,7 +520,7 @@ This mod builds on work from the Garry's Mod community. All third-party code and
 
 ## ⚠️ Disclaimer
 
-This is a **non-commercial fan project**, not affiliated with or endorsed by Activision or any Call of Duty developer. *Call of Duty* and related names are trademarks of Activision Publishing, Inc. No game assets are distributed in this repository.
+This is a **non-commercial fan project**, not affiliated with or endorsed by Activision or any Call of Duty developer. *Call of Duty* and related names are trademarks of Activision Publishing, Inc. Game audio and art in the Release download remain the property of their owners and are included for fan, non-commercial use only.
 
 <div align="center">
 

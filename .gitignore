@@ -1,6 +1,7 @@
 materials/
 models/
-resource/
+resource/*
+!resource/localization/
 sound/
 call_of_duty_hud_collection_mini_dm_gamemode_3720590485/
 
