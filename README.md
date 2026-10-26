@@ -505,7 +505,7 @@ lua/
 
 ## 🙏 Credits
 
-This project is a **group build**. Everyone below agreed to have their work included here. All code and assets belong to their original authors.
+This project is a **group build**. All code and assets belong to their original authors.
 
 - **reha** (`@rehaiu`): **SteezMod v1b** (save/load position, the MW2/MW3 snipers, reha's weapon bases, hit damage numbers)
 - **Scripts&Maps**: *Garry's Mod Killcam*, which the playercard customizer (`kc_menu`) and the original killcam came from
