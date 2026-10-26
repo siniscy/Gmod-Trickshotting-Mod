@@ -512,7 +512,8 @@ This project is a **group build**. All code and assets belong to their original 
 - **Call of Duty HUD Collection / Mini DM gamemode**: the HUD this mod is forked from ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=3720590485))
 - **KatBug**: *Call of Duty 4: Equipment* (claymore, knife) ([Workshop](https://steamcommunity.com/sharedfiles/filedetails/?id=528146710))
 - **Generic Default, Worshipper, Clavus & Bob**: the Bob's / BO2 weapon bases ([BO2 Weapons Pack](https://steamcommunity.com/sharedfiles/filedetails/?id=299164995))
-- **reha** and **Dread**: the CoD weapon ports used by the preset classes
+- **reha** and **Dread**: the CoD weapon ports used by the preset classes, plus textures from Dread's mega pack
+- **Wavy**: CoD4 and World at War weapon ports (MP5, Kar98k and Trench Gun sounds)
 - **YuRaNnNzZZ**: *Lerped Viewmodels* and *Drop Weapon*
 - **xpgui** and **Scalar** UI libraries
 - **Activision, Infinity Ward, Treyarch & Sledgehammer Games**: Call of Duty, which this is a fan tribute to
