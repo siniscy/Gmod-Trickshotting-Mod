@@ -103,7 +103,7 @@ hook.Add("HUDPaint", "CoDHUD_DrawChat", function()
 
     -- 1. INPUT AREA
     if isTyping and IsValid(CoDHUD_ChatEntry) then
-        local prompt      = (chatType == "say_team" and "say_team:" or "say:")
+        local prompt      = (chatType == "say_team" and language.GetPhrase("CoDHUD.Chat.SayTeam") or language.GetPhrase("CoDHUD.Chat.Say"))
         local currentText = CoDHUD_ChatEntry:GetText()
         draw.SimpleText(prompt .. " " .. currentText, "MW2_ChatFont", marginX, chatInputY, Color(255, 255, 255, 225), 0, 0)
 

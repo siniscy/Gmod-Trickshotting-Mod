@@ -37,7 +37,7 @@ hook.Add("PopulateToolMenu", "CoDHUD_SETTINGSMenu", function()
 
     spawnmenu.AddToolMenuOption("Options", "CoDHUD.Title", "MW2_ClientSettings", "#CoDHUD.Title", "", "", function(panel)
         panel:ClearControls()
-		panel:Button("Open CoD HUD Menu", "codhud_openmenu")
+		panel:Button(language.GetPhrase("CoDHUD.QMenu.OpenButton"), "codhud_openmenu")
     end)
 
 end)
@@ -113,9 +113,14 @@ local function CoDHUD_OpenFactionConfirm(factionID)
 		end
 
 		surface.SetDrawColor(255, 255, 255)
-		surface.SetMaterial(Material(factionData.scoreIcon, "smooth"))
-		surface.DrawTexturedRect(w - (w * 0.5) - CoDHUD_S(64), CoDHUD_S(64), CoDHUD_S(128), CoDHUD_S(128))
-		
+		local badgeFn = CoDHUD[CoDHUD_GetHUDType()] and CoDHUD[CoDHUD_GetHUDType()].DrawFactionBadge
+		if badgeFn then
+			badgeFn(factionID, w - (w * 0.5) - CoDHUD_S(64), CoDHUD_S(64), CoDHUD_S(128), 255)
+		else
+			surface.SetMaterial(Material(factionData.scoreIcon, "smooth"))
+			surface.DrawTexturedRect(w - (w * 0.5) - CoDHUD_S(64), CoDHUD_S(64), CoDHUD_S(128), CoDHUD_S(128))
+		end
+
 		local glow = factionData.glow or Color(0,0,0)
 
 		draw.SimpleTextOutlined( "#" .. factionData.name, "MW2_ChalHeader_Pri", w * 0.5, CoDHUD_S(32), Color(255,255,255), 1, 1, 3, Color(glow.r, glow.g, glow.b, 25) )
@@ -391,9 +396,9 @@ local CoDHUD_SETTINGS = {
 							{ type = "checkbox",	label = "#CoDHUD.HUD.Outline",					convar = "codhud_enable_outlinedtext",		tooltip = "CoDHUD.HUD.Outline.desc" },
 						}
 					},
-					{ name = "Explosive Bullets", controls = {
-							{ type = "checkbox",	label = "Enable Explosive Bullets",	convar = "eb_enabled",	tooltip = "Shots explode on hit, damaging nearby NPCs. Disabled in Sesh modes." },
-							{ type = "slider",		label = "Blast Radius",				convar = "eb",			min = 0, max = 300, decimals = 0, tooltip = "Radius of the explosion in units (0-300)." },
+					{ name = "#CoDHUD.HUD.ExplosiveBullets", controls = {
+							{ type = "checkbox",	label = "#CoDHUD.HUD.ExplosiveBullets.Enable",	convar = "eb_enabled",	tooltip = "CoDHUD.HUD.ExplosiveBullets.Enable.desc" },
+							{ type = "slider",		label = "#CoDHUD.HUD.ExplosiveBullets.Radius",	convar = "eb",			min = 0, max = 300, decimals = 0, tooltip = "CoDHUD.HUD.ExplosiveBullets.Radius.desc" },
 						}
 					},
 					{ name = "#CoDHUD.HUD.Scoreboard", controls = {
@@ -402,7 +407,7 @@ local CoDHUD_SETTINGS = {
 					},
 					{ name = "#CoDHUD.HUD.Scorecounter", controls = {
 							{ type = "checkbox",	label = "#CoDHUD.HUD.Scorecounter.Enable",		convar = "codhud_enable_scorebar",			tooltip = "CoDHUD.HUD.Scorecounter.Enable.desc" },
-							{ type = "checkbox",	label = "Hide Round Timer",						convar = "codhud_hide_timer",				tooltip = "Hide the round timer display." },
+							{ type = "checkbox",	label = "#CoDHUD.HUD.Scorecounter.HideTimer",	convar = "codhud_hide_timer",				tooltip = "CoDHUD.HUD.Scorecounter.HideTimer.desc" },
 						}
 					},
 					{ name = "#CoDHUD.HUD.Medals", controls = {
@@ -470,6 +475,34 @@ local CoDHUD_SETTINGS = {
 							{ type = "label", label = "#CoDHUD.Challenges.Reset.desc" },
 						}
 					},
+					{ name = "#CoDHUD.Controller", controls = {
+							{ type = "combobox",	label = "#CoDHUD.Controller.Mode", tooltip = "CoDHUD.Controller.Mode.desc",
+								choices = {
+									{ "#CoDHUD.Controller.Mode.KBM", "0" },
+									{ "#CoDHUD.Controller.Mode.Pad", "1" },
+								},
+								getCurrent = function()
+									local cv = GetConVar("kc_controller")
+									return cv and cv:GetString() or "0"
+								end,
+								onSelect = function(_, value)
+									RunConsoleCommand("kc_controller", value)
+								end
+							},
+							{ type = "slider",		label = "#CoDHUD.Controller.LookSpeed",	convar = "kc_controller_look_speed",	min = 50, max = 1500, decimals = 0, tooltip = "CoDHUD.Controller.LookSpeed.desc" },
+							{ type = "slider",		label = "#CoDHUD.Controller.Curve",		convar = "kc_controller_look_curve",	min = 1, max = 3, decimals = 2, tooltip = "CoDHUD.Controller.Curve.desc" },
+							{ type = "slider",		label = "#CoDHUD.Controller.Deadzone",	convar = "kc_controller_deadzone",		min = 0, max = 0.5, decimals = 2, tooltip = "CoDHUD.Controller.Deadzone.desc" },
+							{ type = "checkbox",	label = "#CoDHUD.Controller.InvertY",	convar = "kc_controller_invert_y",		tooltip = "CoDHUD.Controller.InvertY.desc" },
+							{ type = "checkbox",	label = "#CoDHUD.Controller.SprintLatch",	convar = "kc_controller_sprint_latch",	tooltip = "CoDHUD.Controller.SprintLatch.desc" },
+							{ type = "button",	label = "#CoDHUD.Controller.Measure",
+								func = function()
+									if IsValid(codhud_menu_frame) then codhud_menu_frame:SetVisible(false) end
+									RunConsoleCommand("kc_controller_measure")
+								end
+							},
+							{ type = "label", label = "#CoDHUD.Controller.Layout" },
+						}
+					},
 					{ name = "#CoDHUD.Menu", controls = {
 							{ type = "checkbox",	label = "#CoDHUD.Menu.Fullscreen", convar = "codhud_fullscreen", tooltip = "CoDHUD.Menu.Fullscreen.desc" },
 						}
@@ -533,7 +566,9 @@ local CoDHUD_SETTINGS = {
 
 							{ type = "checkbox", label = "#CoDHUD.RoundStart.Autobalance", server = true, convar = "codhud_autobalance_on_roundstart", tooltip = "CoDHUD.RoundStart.Autobalance.desc" },
 
-							{ type = "checkbox", label = "Fast Last (testing: next kill ends round)", server = true, convar = "kc_fastlast_enabled", tooltip = "Pre-loads the score to one kill from the limit as soon as the round goes live, for quickly testing killcam and round-end flow." },
+							{ type = "checkbox", label = "#CoDHUD.RoundStart.FastLastTest", server = true, convar = "kc_fastlast_enabled", tooltip = "CoDHUD.RoundStart.FastLastTest.desc" },
+
+							{ type = "checkbox", label = "#CoDHUD.RoundStart.GodMode", server = true, convar = "kc_godmode_enabled", tooltip = "CoDHUD.RoundStart.GodMode.desc" },
 
 							{ type = "button", label = "#CoDHUD.RoundStart.Start", 
 								func = function()
@@ -793,7 +828,12 @@ local function CreateCategory(parent, data)
 
 			local btn = vgui.Create("DImageButton")
 			btn:SetSize(64, 64)
-			if faction.scoreIcon then
+			local badgeFn = CoDHUD[CoDHUD_GetHUDType()] and CoDHUD[CoDHUD_GetHUDType()].DrawFactionBadge
+			if badgeFn then
+				btn.Paint = function(self, w, h)
+					badgeFn(id, 0, 0, w, 255)
+				end
+			elseif faction.scoreIcon then
 				btn:SetImage(faction.scoreIcon)
 			else
 				print("[CoDHUD] Missing scoreIcon for faction:", id)

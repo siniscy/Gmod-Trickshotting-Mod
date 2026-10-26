@@ -25,10 +25,12 @@ function CoDHUD_GetScoreMultiplier()
         if gm == "dm" or gm == "sesh_dm" then return 5 end
         return 10  -- TDM and all other modes
     elseif hudType == "bo2" then
-        -- Real BO2 shows TDM score as a plain kill count, not kills*100
-        -- like MW2/MW3/BO1 do -- 75 kills should read "75", not "7500".
+        -- Real BO2 shows TDM AND FFA score as a plain kill count, not
+        -- kills*N -- 75 TDM kills should read "75" (not "7500"), and 30 FFA
+        -- kills should read "30" (not "1500", which FFA showed before this
+        -- -- kills*50).
         if gm == "war" or gm == "sesh_war" then return 1 end
-        if gm == "dm" or gm == "sesh_dm" then return 50 end
+        if gm == "dm" or gm == "sesh_dm" then return 1 end
         return 100
     else
         -- MW2, MW3, BO1
@@ -57,8 +59,6 @@ end
 
 if SERVER then
 
-    AddCSLuaFile("killcam/cl_npcreplay.lua")
-
     include("ffa/sv_ffa_bots.lua")
 
     -- ================================================================
@@ -72,23 +72,49 @@ if SERVER then
     -- missing, and only look up Killcam.StartPlaying at call time (by which
     -- point the core has definitely loaded).
     Killcam = Killcam or {}
+    -- Humans always; bots and AI too while kc_killcam_bots is on (default),
+    -- seen through their eyes the way CoD shows a bot's final killcam.
+    local function CanBeKiller(killer)
+        if Killcam.Archive and Killcam.Archive.CanBeKiller then
+            return Killcam.Archive.CanBeKiller(killer)
+        end
+        return IsValid(killer) and killer:IsPlayer() and not killer:IsBot()
+    end
+    Killcam.CanBeKiller = CanBeKiller
+
+    local function KillerName(killer)
+        return killer:IsPlayer() and killer:Nick() or killer:GetClass()
+    end
+
     function Killcam.BeginFor(killer)
         if GetGlobalBool("Killcam_Playing") then return end
-        if not IsValid(killer) or not killer:IsPlayer() or killer:IsBot() then
-            print("[KC] BeginFor: no valid human killer")
-            return
-        end
-        if not (killer.KC_Recorder and killer.KC_Ready) then
-            print("[KC] BeginFor: killer not ready -- " .. tostring(killer))
+        if not CanBeKiller(killer) then
+            print("[KC] BeginFor: no valid killer (" .. tostring(killer) .. ")")
             return
         end
         if not Killcam.StartPlaying then
             print("[KC] BeginFor: Killcam.StartPlaying missing (core not loaded?)")
             return
         end
-        print("[KC] BeginFor: starting killcam for " .. killer:Nick())
+        print("[KC] BeginFor: starting killcam for " .. KillerName(killer))
         Killcam.StartPlaying(killer)
     end
+
+    -- Call the moment the round-ending kill is known: the archive starts
+    -- cutting and sending the footage right away, so it's already on every
+    -- client by the time BeginFor runs.
+    function Killcam.PrepareKillcam(killer)
+        if not CanBeKiller(killer) then return end
+        if Killcam.PrepareFor then Killcam.PrepareFor(killer) end
+    end
+
+    -- Remember bot / AI kills as potential round-ending kills too (human
+    -- kills are already tracked by the hooks further down).
+    hook.Add("PlayerDeath", "KC_TrackBotAIKiller", function(victim, inflictor, attacker)
+        if not IsValid(attacker) or attacker == victim then return end
+        if attacker:IsPlayer() and not attacker:IsBot() then return end
+        if CanBeKiller(attacker) then _G.KC_PendingKiller = attacker end
+    end)
 
     NPC_FactionScores      = NPC_FactionScores or {}
     NPC_FactionAssignments = NPC_FactionAssignments or {}
@@ -208,6 +234,17 @@ if SERVER then
 
     local function RestorePlayerWeapons(p)
         if not IsValid(p) then return end
+        -- A class loadout (lua/codhud/sv_loadouts_give.lua) is active for
+        -- this player -- PlayerLoadout already gave the class's Primary/
+        -- Secondary/Equipment at the p:Spawn() moments ago (both call sites
+        -- below run this right after a Spawn()), so restoring the old S&D
+        -- round-to-round carryover loadout here would immediately clobber
+        -- it. Only players on "none" (manual, no class) fall through to the
+        -- carryover restore, exactly as before this system existed.
+        if not p:IsBot() then
+            local mode = p:GetInfo("kc_loadout_mode")
+            if mode ~= "" and mode ~= "none" then return end
+        end
         -- For sesh modes, prefer PlayerLoadouts (kept in sync by SeshBot_SaveLoadout)
         -- so the loadout saved on death is used rather than the stale SD_SavedWeapons.
         local uid = p:UserID()
@@ -253,10 +290,16 @@ if SERVER then
         end
         p:UnSpectate()
         p:Spawn()
-        local sp = GetRandomSpawn()
-        if IsValid(sp) then
-            p:SetPos(sp:GetPos() + Vector(0, 0, 10))
-            p:SetEyeAngles(sp:GetAngles())
+        if KC_Spawns and KC_Spawns.Enabled() then
+            -- Near teammates, far from enemies, never inside anyone.
+            KC_Spawns.Place(p)
+            p.KC_SpawnPlacedT = CurTime()
+        else
+            local sp = GetRandomSpawn()
+            if IsValid(sp) then
+                p:SetPos(sp:GetPos() + Vector(0, 0, 10))
+                p:SetEyeAngles(sp:GetAngles())
+            end
         end
         if giveWeapons then RestorePlayerWeapons(p) end
         if freeze then p:Freeze(true) end
@@ -269,10 +312,21 @@ if SERVER then
 
     hook.Add("KillcamReplayStopped", "CoDHUD_SD_FixPosition", function()
         if not IsSD() then return end
-        local sp = GetRandomSpawn()
-        if not IsValid(sp) then return end
-        SD_FixSpawnPos = sp:GetPos() + Vector(0, 0, 10)
-        SD_FixSpawnAng = sp:GetAngles()
+        -- Each player gets their own spot (they used to all be pinned to the
+        -- same one, stacked inside each other, for this second).
+        SD_FixSpawnPos = {}
+        for _, p in ipairs(player.GetAll()) do
+            if IsValid(p) and p:Alive() then
+                local pos, ang
+                if KC_Spawns and KC_Spawns.Enabled() then
+                    pos, ang = KC_Spawns.Pick(p)
+                else
+                    local sp = GetRandomSpawn()
+                    if IsValid(sp) then pos, ang = sp:GetPos() + Vector(0, 0, 10), sp:GetAngles() end
+                end
+                if pos then SD_FixSpawnPos[p] = { pos = pos, ang = ang } end
+            end
+        end
         for _, p in ipairs(player.GetAll()) do
             if IsValid(p) then p:Freeze(true) end
         end
@@ -292,10 +346,10 @@ if SERVER then
             SD_FixSpawnActive = false
             return
         end
-        for _, p in ipairs(player.GetAll()) do
-            if IsValid(p) and SD_FixSpawnPos then
-                p:SetPos(SD_FixSpawnPos)
-                p:SetEyeAngles(SD_FixSpawnAng)
+        for p, spot in pairs(SD_FixSpawnPos or {}) do
+            if IsValid(p) then
+                p:SetPos(spot.pos)
+                p:SetEyeAngles(spot.ang)
                 p:Freeze(true)
             end
         end
@@ -528,7 +582,11 @@ if SERVER then
         SyncSDMatchScores()
         StopSuspenseOnClients()
 
-        local scoreLimit  = GetConVar("codhud_score_limit"):GetInt()
+        -- S&D is "first team to win N rounds" (4, like CoD) for every S&D
+        -- mode -- the same sesh_sd_rounds the scorebar fills against.
+        -- codhud_score_limit is the TDM/FFA kill limit (75), not rounds.
+        local cvRounds    = GetConVar("sesh_sd_rounds")
+        local scoreLimit  = cvRounds and cvRounds:GetInt() or 4
         if scoreLimit <= 0 then scoreLimit = 4 end
 
         local playerScore = SD_MatchScores[playerFaction] or 0
@@ -589,14 +647,16 @@ if SERVER then
             net.Broadcast()
         end)
 
-        -- Only attempt killcam if round ended by a real human player's kill.
-        -- - Player won (killed last NPC): always show killcam (human made the kill)
-        -- - Enemy won by kill: only if a real human player died to another human
-        -- - Time limit / bot kill / NPC kill: skip killcam, go straight to reset
+        -- Show the killcam whenever the round ended on a kill:
+        -- - Player won (killed last NPC): the human's kill
+        -- - Enemy won by kill: whoever killed the player -- a human, or (while
+        --   kc_killcam_bots is on) the bot / NPC, seen through its eyes
+        -- - Time limit: no kill to show, go straight to reset
         local doKillcam = not timedOut and (playerWon or SD_LastKillerIsHuman)
         SD_LastKillerIsHuman = false  -- reset for next round
 
         if doKillcam then
+            Killcam.PrepareKillcam(_G.KC_PendingKiller)
             timer.Simple(6, function()
                 for _, p in ipairs(player.GetAll()) do
                     if IsValid(p) then
@@ -911,12 +971,13 @@ if SERVER then
         end
     end)
 
-    -- Track in S&D whether the player was killed by a real human (for killcam).
-    -- NPC kills and bot kills skip the killcam; only real players trigger it.
+    -- Track in S&D who killed the player, for the round-ending killcam.
+    -- (SD_LastKillerIsHuman now means "has a killer the killcam can show":
+    -- bots and AI count too while kc_killcam_bots is on.)
     hook.Add("PlayerDeath", "CoDHUD_SD_TrackKiller", function(victim, inflictor, attacker)
         if not IsSD() then return end
         if not SD_RoundActive then return end
-        if IsValid(attacker) and attacker:IsPlayer() and not attacker:IsBot() then
+        if IsValid(attacker) and attacker ~= victim and Killcam.CanBeKiller(attacker) then
             SD_LastKillerIsHuman = true
             _G.KC_PendingKiller  = attacker
         else
@@ -1077,7 +1138,6 @@ if SERVER then
             KC_BotKillID_Server = npc:EntIndex()
             hook.Run("CoDHUD_BotKillSetKill", npc, attacker)
         end
-        if attacker.KC_Recorder then attacker.KC_Recorder:SetKill(npc) end
     end)
 
     -- Bot (CreateNextBot) kills -- mirrors OnNPCKilled for sesh_dm bots
@@ -1094,9 +1154,6 @@ if SERVER then
         -- Only update kill ID if not locked (locked by sv_ffa_bots on winning kill)
         if not _G.SeshBot_KillcamIDLocked then
             KC_BotKillID_Server = victim:EntIndex()
-        end
-        if attacker.KC_Recorder then
-            attacker.KC_Recorder:SetKill(victim)
         end
         timer.Simple(20, function()
             if IsValid(victim) then victim.KC_IsKillcamTarget = false end
@@ -1302,6 +1359,7 @@ if SERVER then
         if KC_NonSD_Queued then return end
         if GetGlobalBool("Killcam_Playing") then return end
         KC_NonSD_Queued = true
+        Killcam.PrepareKillcam(_G.KC_PendingKiller)
         timer.Simple(6.5, function()
             Killcam.BeginFor(_G.KC_PendingKiller)
         end)
@@ -1310,8 +1368,6 @@ if SERVER then
 end
 
 if CLIENT then
-
-    include("killcam/cl_npcreplay.lua")
 
     KC_NPC_FactionScores = KC_NPC_FactionScores or {}
     KC_SD_MatchScores    = KC_SD_MatchScores    or {}

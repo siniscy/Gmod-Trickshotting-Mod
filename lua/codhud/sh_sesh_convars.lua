@@ -28,4 +28,15 @@ if SERVER then
     -- should never have to manually run a console command just to get
     -- the mode's correct win condition -- hardwire it the same way.
     GetConVar("sesh_sd_rounds"):SetInt(4)
+
+    -- Same drift bug, same fix, for the hard round cap. sesh_sd_maxrounds
+    -- is also FCVAR_ARCHIVE, so a leftover "4" from earlier testing (e.g.
+    -- someone temporarily lowering it to test the win condition above)
+    -- persists across map changes/restarts and silently overrides the "7"
+    -- in CreateConVar above. Since ST.OnSndRoundEnd treats totalRounds >=
+    -- maxRounds as "match over, whoever has more rounds wins" -- with
+    -- maxrounds stuck at 4 the match ends the moment 4 rounds have been
+    -- PLAYED (e.g. a 2-2 split), instead of requiring a team to actually
+    -- WIN sesh_sd_rounds (4) rounds. Hardwire it back to 7 every boot.
+    GetConVar("sesh_sd_maxrounds"):SetInt(7)
 end

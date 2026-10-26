@@ -38,6 +38,7 @@ function CoDHUD_Header_MW:New(cfg)
 	
     o.subtext    = cfg.subtext or nil
     o.icon       = cfg.icon or nil
+    o.iconFac    = cfg.iconFac or nil
 
     o.color      = cfg.color or Color(255,255,255)
     o.subcolor   = cfg.subcolor or Color(255,255,255)
@@ -557,11 +558,16 @@ function CoDHUD_Header_MW:Draw()
 			yOffset = (textH * 0.5) + self.iconGap + padding
 		end
 
-		surface.SetMaterial(self.icon)
-		surface.SetDrawColor(255,255,255,self.iconAlpha)
-		surface.DrawTexturedRect(self.iconX - (size/2), self.iconY, size, size)
+		local badgeFn = self.iconFac and CoDHUD[CoDHUD_GetHUDType()] and CoDHUD[CoDHUD_GetHUDType()].DrawFactionBadge
+		if badgeFn then
+			badgeFn(self.iconFac, self.iconX - (size/2), self.iconY, size, self.iconAlpha)
+		else
+			surface.SetMaterial(self.icon)
+			surface.SetDrawColor(255,255,255,self.iconAlpha)
+			surface.DrawTexturedRect(self.iconX - (size/2), self.iconY, size, size)
+		end
 	end
-	
+
 	-- TEAMS
 	if self.teams then
 		local count = #self.teams
@@ -609,11 +615,16 @@ function CoDHUD_Header_MW:Draw()
 			local x = self.x + ((i - 1) * step - totalW / 2)
 			local y = self.iconY or self.y
 
-			local mat = GetSpawnMat(t.fac)
-			if mat then
-				surface.SetMaterial(mat)
-				surface.SetDrawColor(255, 255, 255, self.iconAlpha or 255)
-				surface.DrawTexturedRect(x - size/2, y, size, size)
+			local badgeFn = CoDHUD[CoDHUD_GetHUDType()] and CoDHUD[CoDHUD_GetHUDType()].DrawFactionBadge
+			if badgeFn then
+				badgeFn(t.fac, x - size/2, y, size, self.iconAlpha or 255)
+			else
+				local mat = GetSpawnMat(t.fac)
+				if mat then
+					surface.SetMaterial(mat)
+					surface.SetDrawColor(255, 255, 255, self.iconAlpha or 255)
+					surface.DrawTexturedRect(x - size/2, y, size, size)
+				end
 			end
 
 			local fd = CoDHUD.Factions[CoDHUD_GetHUDType()] and CoDHUD.Factions[CoDHUD_GetHUDType()][t.fac]

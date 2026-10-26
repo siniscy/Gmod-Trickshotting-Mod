@@ -93,10 +93,14 @@ function ST.OnBotKilledPlayer(victim)
 end
 
 -- Called by sv_sesh_sd for round end
-function ST.OnSndRoundEnd(winner)
-    -- winner = "A" (player team) or "B" (bot team)
-    if winner == "A" then ST.roundsA = ST.roundsA + 1
-    else ST.roundsB = ST.roundsB + 1 end
+function ST.OnSndRoundEnd(winner, alreadyCounted)
+    -- winner = "A" (player team) or "B" (bot team). alreadyCounted: the win
+    -- was added to the score the moment the round ended (so the scorebar
+    -- updates right away, like CoD), only the rest happens here.
+    if not alreadyCounted then
+        if winner == "A" then ST.roundsA = ST.roundsA + 1
+        else ST.roundsB = ST.roundsB + 1 end
+    end
     local lim     = GetConVar("sesh_sd_rounds"):GetInt()
     local maxRounds = GetConVar("sesh_sd_maxrounds"):GetInt()
     local totalRounds = ST.roundsA + ST.roundsB

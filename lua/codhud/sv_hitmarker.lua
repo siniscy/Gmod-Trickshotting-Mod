@@ -9,48 +9,39 @@ local function IsSeshMode()
     return gm == "sesh_dm" or gm == "sesh_war" or gm == "sesh_sd" or gm == "sesh_sd_set"
 end
 
+local function Owner(ent)
+    if IsValid(ent) and ent:IsWeapon() and IsValid(ent:GetOwner()) then return ent:GetOwner() end
+    return ent
+end
+
+-- Every hit a real player lands on anything that can fight back -- other
+-- players (friends or bots), NPCs, nextbots -- gives that player a
+-- hitmarker, host and non-host alike. (The killcam replays these same hits
+-- from its own recording, so they show there too.)
 hook.Add("PostEntityTakeDamage", "MW2_Server_Hitmarker_Logic", function(target, dmginfo, took)
-    local attacker = dmginfo:GetAttacker()
+    local attacker = Owner(dmginfo:GetAttacker())
 
     if not (took and IsValid(attacker) and attacker:IsPlayer() and attacker ~= target) then return end
-    if not (target:IsNPC() or target:IsPlayer() or target:IsNextBot()) then return end
+    if not IsValid(target) then return end
+    local isBot = target.IsNextBot and target:IsNextBot()
+    if not (target:IsNPC() or target:IsPlayer() or isBot) then return end
 
-    -- Attacker must be a real human
+    -- Bots have no screen to show a hitmarker on.
     if attacker:IsBot() then return end
 
-    local isKill = IsValid(target) and (
-        (target:IsPlayer() and target:Health() <= 0) or
-        (target:IsNPC() and target:Health() <= 0)
-    )
+    local isKill = target:Health() <= 0
 
-    -- SESH MODE: real human hitting a bot → send KC_HitNotification
     if IsSeshMode() then
-        if target:IsPlayer() and target:IsBot() then
-            net.Start("KC_HitNotification")
-                net.WriteBool(isKill)
-            net.Send(attacker)
-        end
+        -- Sesh: the client turns this into the hitmarker (+ kill XP popup).
+        net.Start("KC_HitNotification")
+            net.WriteBool(isKill)
+        net.Send(attacker)
         return
     end
 
-    -- NORMAL MODE: NPC or player hit → CoDHUD_HitNotification (handles XP display)
-    -- Also send KC_HitNotification so hitmarker shows during killcam
-    if not target:IsPlayer() and not target:IsNPC() then return end
-    if target:IsPlayer() and target:IsBot() then return end
-    if target:IsPlayer() and target:GetNWBool("FFA_IsBot", false) then return end
-
-    if _G.CoDHUD_GiveXP then
-        _G.CoDHUD_GiveXP(attacker, isKill and 100 or 10)
-    end
-
-    -- Primary notification (shows XP popup via base CoDHUD)
+    -- Normal modes: hitmarker + XP popup.
     net.Start("CoDHUD_HitNotification")
         net.WriteBool(isKill)
         net.WriteInt(isKill and 100 or 10, 32)
-    net.Send(attacker)
-
-    -- Secondary: also send KC_HitNotification so hitmarker works during killcam
-    net.Start("KC_HitNotification")
-        net.WriteBool(isKill)
     net.Send(attacker)
 end)

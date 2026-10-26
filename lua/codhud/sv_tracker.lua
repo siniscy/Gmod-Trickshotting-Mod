@@ -75,7 +75,7 @@ net.Receive("CoDHUD_RequestFactionChange", function(len, ply)
 	print("[CoDHUD] " .. ply:Nick() .. " changed teams to " .. CoDHUD.Factions.GetFactionName(faction))
 	
 	local textstr = "MW2_GAME_CHANGEDTO"
-	local factionName = CoDHUD.Factions[CoDHUD_GetHUDType()][faction].name
+	local factionName = CoDHUD.Factions.GetFactionNameKey(CoDHUD_GetHUDType(), faction)
 
 	net.Start("CoDHUD_PlayerAutoBalanced")
 	net.WriteString(textstr)

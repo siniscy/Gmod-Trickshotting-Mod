@@ -14,6 +14,34 @@ CoDHUD_MusicVolumeScale = CoDHUD_MusicVolumeScale or 1
 
 local ANNOUNCER_COOLDOWN = 1 -- small gap between lines
 
+-- Killcam should be quiet -- nothing here (suspense stings, round-end
+-- victory/defeat music+voice, timer callouts, etc.) checks whether a
+-- killcam is playing before starting, so ambient music that happens to
+-- roll on its random 15-20s timer, or round-end music that starts the
+-- instant the round ends (killcam itself only starts ~6s later), bleeds
+-- into the killcam. Two parts: block anything NEW from starting while a
+-- killcam is playing (checked in CoDHUD_PlayAnnouncerSound below, the one
+-- function everything already routes through), and stop whatever's
+-- already playing the moment a killcam begins.
+--
+-- hook.Run("KillcamReplayStarted"/"Stopped") is server-side only (see
+-- lua/killcam/cl_npcreplay.lua's comment -- hook.Run never crosses the
+-- network, so client-side listeners for those two hook names never fire)
+-- so this polls KC_Playing() directly instead, the same reliable pattern
+-- killcam_codhud_integration.lua's CoDHUD_KillcamHUDToggle already uses.
+local KC_AnnouncerWasKillcamActive = false
+hook.Add("Think", "CoDHUD_Announcer_KillcamSilence", function()
+    local active = KC_Playing and KC_Playing() or false
+    if active and not KC_AnnouncerWasKillcamActive then
+        if IsValid(CoDHUD_CurrentMusic) then
+            CoDHUD_CurrentMusic:Stop()
+            CoDHUD_CurrentMusic = nil
+        end
+        CoDHUD_AnnouncerQueue = {}
+    end
+    KC_AnnouncerWasKillcamActive = active
+end)
+
 local function CoDHUD_ProcessAnnouncerQueue()
     if CoDHUD_AnnouncerPlaying then return end
     if #CoDHUD_AnnouncerQueue == 0 then return end
@@ -40,8 +68,9 @@ hook.Add("Think", "CoDHUD_AnnouncerQueue_Think", CoDHUD_ProcessAnnouncerQueue)
 
 -- Helper to play sounds with toggle checks
 function CoDHUD_PlayAnnouncerSound(path, isMusic, volume)
+	if KC_Playing and KC_Playing() then return end
 	CoDHUD_MusicVolumeScale = GetConVar("snd_musicvolume"):GetFloat() or 1
-	
+
     if isMusic then
         if not GetConVar("codhud_enable_music"):GetBool() then return end
 
@@ -52,6 +81,14 @@ function CoDHUD_PlayAnnouncerSound(path, isMusic, volume)
         end
 
 		sound.PlayFile("sound/" .. path, "noplay", function(chan, err)
+			-- sound.PlayFile loads async -- a killcam can start in the gap
+			-- between the call above passing its KC_Playing() check and this
+			-- callback actually firing, which would otherwise let it start
+			-- playing into a killcam anyway. Re-check right before playing.
+			if KC_Playing and KC_Playing() then
+				if IsValid(chan) then chan:Stop() end
+				return
+			end
 			if IsValid(chan) then
 				CoDHUD_CurrentMusic = chan
 

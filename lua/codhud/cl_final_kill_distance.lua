@@ -27,17 +27,25 @@ net.Receive("KC_FinalKillDistance", function()
     local meters    = net.ReadUInt(16)
 
     local lp = LocalPlayer()
-    local attackerName = IsValid(attacker) and attacker:Nick() or "Someone"
-    local victimName    = IsValid(victim) and victim:Nick() or "someone"
-
-    -- Everyone sees the real shooter's name, except the shooter themselves
-    -- sees "You" -- matches how CoD's own killfeed personalizes this line.
-    local verb = (IsValid(attacker) and attacker == lp) and "You killed" or (attackerName .. " killed")
+    local attackerName = IsValid(attacker) and attacker:Nick() or language.GetPhrase("CoDHUD.FinalKillDistance.Someone")
+    local victimName    = IsValid(victim) and victim:Nick() or language.GetPhrase("CoDHUD.FinalKillDistance.someone")
 
     print("[KC] FinalKillDistance received: " .. attackerName .. " -> " .. victimName .. " (" .. meters .. " m)")
 
+    -- Everyone sees the real shooter's name, except the shooter themselves
+    -- sees "You" -- matches how CoD's own killfeed personalizes this line.
+    -- Full-sentence phrase templates (not glued-together fragments) so
+    -- languages with different word order (e.g. Korean's subject-object-verb)
+    -- still read correctly.
+    local text
+    if IsValid(attacker) and attacker == lp then
+        text = string.format(language.GetPhrase("CoDHUD.FinalKillDistance.YouKilledFrom"), victimName, meters)
+    else
+        text = string.format(language.GetPhrase("CoDHUD.FinalKillDistance.KilledFrom"), attackerName, victimName, meters)
+    end
+
     pending = {
-        text      = string.format("%s %s from %d m", verb, victimName, meters),
+        text      = text,
         spawnTime = CurTime(),
         dieTime   = CurTime() + LIFETIME,
     }

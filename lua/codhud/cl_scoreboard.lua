@@ -75,7 +75,10 @@ hook.Add("DrawOverlay", "MW2_Scoreboard_Main", function()
         draw.SimpleTextOutlined(string.upper(game.GetMap()), mapFont, scrW/2, CoDHUD_S(98), Color(255,255,255), 1, 0, outlined and 1.5 or 0, Color(0,0,0))
 
         -- Faction icon
-        if fData and fData.spawnIcon then
+        local badgeFn = factions and CoDHUD[hudType] and CoDHUD[hudType].DrawFactionBadge
+        if badgeFn then
+            badgeFn(myFaction, barX, startY + CoDHUD_S(-86), CoDHUD_S(77), 255)
+        elseif fData and fData.spawnIcon then
             surface.SetMaterial(Material(fData.spawnIcon, "smooth"))
             surface.SetDrawColor(255,255,255,255)
             surface.DrawTexturedRect(barX, startY + CoDHUD_S(-86), CoDHUD_S(77), CoDHUD_S(77))
@@ -85,10 +88,13 @@ hook.Add("DrawOverlay", "MW2_Scoreboard_Main", function()
         local sectionName = fData and language.GetPhrase(fData.short) or myFaction
         draw.SimpleTextOutlined(sectionName .. " (" .. #entries .. ")", mapFont, barX + CoDHUD_S(96), startY + CoDHUD_S(-44), Color(255,255,255), 0, 0, outlined and 1 or 0, Color(0,0,0))
 
-        -- Column headers
-        draw.SimpleTextOutlined("Deaths", mapFont, barRight - CoDHUD_S(10), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
-        draw.SimpleTextOutlined("Kills", mapFont, barRight - CoDHUD_S(225), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
-        draw.SimpleTextOutlined("Score", mapFont, barRight - CoDHUD_S(335), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
+        -- Column headers -- reuse the existing scoreboard phrase keys
+        -- (already localized) rather than duplicating them per-hudType,
+        -- since "Deaths/Kills/Score" translate the same regardless of
+        -- which game's look is active.
+        draw.SimpleTextOutlined(language.GetPhrase("MW2_CGAME_SB_DEATHS"), mapFont, barRight - CoDHUD_S(10), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
+        draw.SimpleTextOutlined(language.GetPhrase("MW2_CGAME_SB_KILLS"), mapFont, barRight - CoDHUD_S(225), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
+        draw.SimpleTextOutlined(language.GetPhrase("MW2_CGAME_SB_SCORE"), mapFont, barRight - CoDHUD_S(335), startY - CoDHUD_S(35), Color(255,255,255), TEXT_ALIGN_RIGHT, 0, outlined and 1 or 0, Color(0,0,0))
 
         -- Draw player rows (includes bots since they are player entities)
         local MAT_ICON_DEAD = Material(hudType .. "/icons/hud_status_dead.png", "mips smooth")
@@ -176,9 +182,10 @@ hook.Add("ScoreboardHide", "MW2_Scoreboard_Close", function()
     CoDHUD_ScoreboardOpened = false
 end)
 
-hook.Add("PlayerBindPress", "MW2_Scoreboard_Scroll", function(ply, bind, pressed)
+hook.Add("PlayerBindPress", "MW2_Scoreboard_Scroll", function(ply, bind, pressed, code)
     if not CoDHUD_ScoreboardOpened then return end
     if not pressed then return end
+    if KC_Controller and KC_Controller.BlocksBind(code) then return end
 
     local sb = CoDHUD.Scoreboard
     local maxScroll = math.max(0, sb.ContentHeight - sb.VisibleHeight)

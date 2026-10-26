@@ -18,6 +18,16 @@ hook.Add("HUDPaint", "LowHealth_BloodHUD_Dynamic", function()
     local ply = LocalPlayer()
     if not IsValid(ply) or not ply:Alive() then return end
 
+    -- God Mode (sv_godmode.lua): no blood or defocus on screen. Also clear any
+    -- leftover state so an old hit can't reappear when God Mode is turned off.
+    if ply:GetNWBool("KC_GodMode", false) then
+        lastHealth = ply:Health()
+        flashEndTime = 0
+        lastHitTime = -math.huge
+        lastHitOverlayPeak = 0
+        return
+    end
+
     local hp = ply:Health()
     local curTime = CurTime()
 
@@ -131,6 +141,24 @@ local function PlayRandom(tbl)
     return path
 end
 
+-- Stops any breathing/heartbeat that is playing and forgets all low-health
+-- audio state. Used while God Mode is on (sv_godmode.lua), so nothing keeps
+-- playing and no "recover" breath fires when God Mode is turned off.
+local function ResetLowHealthAudio()
+    playing = false
+    health_dropped_time = 0
+    low_health = false
+    waiting_for_recover = false
+    recovering = false
+    breathing_paused_for_water = false
+    recover_deferred_for_water = false
+    if last_breath_sound then StopSoundFile(last_breath_sound) last_breath_sound = nil end
+    if last_heartbeat_sound then StopSoundFile(last_heartbeat_sound) last_heartbeat_sound = nil end
+    if timer.Exists("LowHealthEffect_Timer") then timer.Remove("LowHealthEffect_Timer") end
+    if timer.Exists("LowHealthEffect_HeartbeatTimer") then timer.Remove("LowHealthEffect_HeartbeatTimer") end
+    if queued_recover_timer then timer.Remove(queued_recover_timer) queued_recover_timer = nil end
+end
+
 hook.Add("Think", "LowHealthEffect_Think", function()
     local ply = LocalPlayer()
     if not IsValid(ply) or not ply:Alive() then
@@ -149,6 +177,12 @@ hook.Add("Think", "LowHealthEffect_Think", function()
             if timer.Exists("LowHealthEffect_HeartbeatTimer") then timer.Remove("LowHealthEffect_HeartbeatTimer") end
             if queued_recover_timer then timer.Remove(queued_recover_timer) queued_recover_timer = nil end
         end
+        return
+    end
+
+    -- God Mode: no low-health breathing, heartbeat or recovery sounds.
+    if ply:GetNWBool("KC_GodMode", false) then
+        ResetLowHealthAudio()
         return
     end
 

@@ -28,7 +28,11 @@ end
 
 local wasShowingMode = false  -- debug: only print on the false->true transition, not every frame
 
-local function GetScorebarData()
+-- Exposed globally (not just local) so other systems -- e.g. the ported
+-- Advanced HUD's health/armor slots repurposed as team-score readouts --
+-- can reuse this exact score computation (round wins for S&D, kills
+-- everywhere else) instead of duplicating it.
+function CoDHUD_GetScorebarData()
     local ply = LocalPlayer()
     if not IsValid(ply) then return end
 
@@ -75,9 +79,25 @@ local function GetScorebarData()
 			end
 			-- Build directly from raw round counts — ignore KC_NPC_FactionScores
 			-- entirely for sesh_sd (it belongs to normal sd NPC mode only).
+			--
+			-- botFac above is ONLY used to pick the enemy bar's faction-specific
+			-- texture/icon (each game HUD falls back to a generic bar if the key
+			-- doesn't resolve to a real faction, see e.g. waw.lua's enemybar
+			-- lookup). It must NOT gate whether the enemy's round-win NUMBER
+			-- shows at all: a reported bug had the bottom-left round-win bar
+			-- stuck at 0 for the team that just won a round (right after a
+			-- round loss, the round-end freeze/killcam/spectate state can leave
+			-- no bot passing this scan for a frame or more) even though the tab
+			-- scoreboard -- which doesn't require finding a live bot to attach
+			-- KC_SD_SeshRoundsB to -- showed the correct count the whole time.
+			-- Always key the enemy's score in, using a synthetic fallback key
+			-- when no live bot is found, so it's never silently dropped from
+			-- factionScores (and this fix lives here, in the single shared
+			-- CoDHUD_GetScorebarData(), so every per-game HUD file that reads
+			-- data.clientScore/data.enemyScore gets it, not just one HUD).
 			factionScores = {}
 			if myFac ~= "" then factionScores[myFac] = KC_SD_SeshRoundsA end
-			if botFac then factionScores[botFac] = KC_SD_SeshRoundsB end
+			factionScores[botFac or "__sd_enemy__"] = KC_SD_SeshRoundsB
 		else
 			-- Normal sd: use KC_SD_MatchScores + NPC faction scores
 			for faction, score in pairs(KC_SD_MatchScores) do
@@ -216,18 +236,19 @@ local function GetScorebarData()
         local hudType = CoDHUD_GetHUDType and CoDHUD_GetHUDType() or "mw2"
         local gmKey   = GetConVar("codhud_selected_gamemode") and GetConVar("codhud_selected_gamemode"):GetString() or ""
 
-        -- Override display names — correct naming and full caps
-        local GM_DISPLAY = {
-            ["war"]      = "TEAM DEATHMATCH",
-            ["dm"]       = "FREE FOR ALL",
-            ["sd"]       = "SEARCH AND DESTROY",
-            ["sesh_war"] = "GMOD SESH TDM",
-            ["sesh_dm"]  = "GMOD SESH FFA",
-            ["sesh_sd"]  = "GMOD SESH S&D",
-            ["sesh_sd_set"] = "GMOD SESH S&D SET",
+        -- Override display names — correct naming and full caps. Phrase
+        -- keys live in codhud_system.properties as CoDHUD.ScorebarGM.<key>.
+        local GM_DISPLAY_KEYS = {
+            ["war"]      = "CoDHUD.ScorebarGM.war",
+            ["dm"]       = "CoDHUD.ScorebarGM.dm",
+            ["sd"]       = "CoDHUD.ScorebarGM.sd",
+            ["sesh_war"] = "CoDHUD.ScorebarGM.sesh_war",
+            ["sesh_dm"]  = "CoDHUD.ScorebarGM.sesh_dm",
+            ["sesh_sd"]  = "CoDHUD.ScorebarGM.sesh_sd",
+            ["sesh_sd_set"] = "CoDHUD.ScorebarGM.sesh_sd_set",
         }
 
-        local gmName = GM_DISPLAY[gmKey]
+        local gmName = GM_DISPLAY_KEYS[gmKey] and language.GetPhrase(GM_DISPLAY_KEYS[gmKey])
         if not gmName then
             -- Fallback: look up from gamemodes table and uppercase it
             if CoDHUD.Gamemodes and CoDHUD.Gamemodes[hudType] then
@@ -263,7 +284,7 @@ hook.Add("HUDPaint", "CoDHUD_Scorebar", function()
     if not IsValid(ply) then return end
 
     if CoDHUD[CoDHUD_GetHUDType()] and CoDHUD[CoDHUD_GetHUDType()].Scorebar then
-        local data = GetScorebarData()
+        local data = CoDHUD_GetScorebarData()
         if data then
             CoDHUD[CoDHUD_GetHUDType()].Scorebar(data)
         end

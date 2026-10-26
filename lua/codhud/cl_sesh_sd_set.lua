@@ -35,7 +35,9 @@ hook.Add("Think", "KC_SDSet_KeyPoll", function()
         return
     end
 
+    -- D-pad left is the controller's L (cl_kc_controller.lua).
     local down = input.IsKeyDown(KEY_L)
+        or (KC_Controller and KC_Controller.IsOn() and input.IsButtonDown(KEY_XBUTTON_LEFT))
     if down and not wasDown then
         RunConsoleCommand("sesh_move_bot_to_crosshair")
     end

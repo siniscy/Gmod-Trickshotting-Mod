@@ -76,6 +76,9 @@ if CLIENT then
         end
     end
 
+    -- The killcam replay shows the killer's "+XP" popup at the kill.
+    _G.CoDHUD_GetKillXP = GetKillXP
+
     local function DoHitmarker(isKill, playSnd)
         hitAlpha = 255
         hitTime  = CurTime() + 1.5

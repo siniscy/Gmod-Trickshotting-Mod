@@ -60,6 +60,29 @@ CoDHUD.Factions.validfactions = {
 	},
 }
 
+-- Phrase keys for the faction display names broadcast below -- kept
+-- separate from CoDHUD.Factions[hudtype][id].name (set in games/*.lua),
+-- since that field is read as a resolved display string in many other
+-- client files (cl_settings.lua, cl_roundend.lua, cl_header_mw.lua, etc.)
+-- and changing its meaning there is out of scope. cl_killfeed.lua's
+-- CoDHUD_PlayerAutoBalanced receiver already calls language.GetPhrase() on
+-- whatever string arrives as the faction name (line ~112) -- it was built
+-- to take a phrase key, it just never got one before now, so every
+-- faction name silently rendered as the English literal in every language.
+local FACTION_NAME_KEYS = {
+	cod4 = { marines = "CoD4_MPUI_MARINES", sas = "CoD4_MPUI_SAS", ussr = "CoD4_MPUI_SPETSNAZ", arab = "CoD4_MPUI_OPFOR" },
+	waw  = { american = "WAW_MPUI_MARINE", soviet = "WAW_MPUI_RUSSIAN", german = "WAW_MPUI_GERMAN", japan = "WAW_MPUI_JAPANESE" },
+	mw2  = { rangers = "MW2_MP_US_ARMY_NAME", taskforce141 = "MW2_MP_TASKFORCE_NAME", seals = "MW2_MP_SEALS_UDT_NAME", ussr = "MW2_MP_SPETSNAZ_NAME", arab = "MW2_MP_OPFOR_NAME", militia = "MW2_MP_MILITIA_NAME" },
+	bo1  = { op4 = "BO1_MP_REBELS_NAME", ops = "BO1_MP_SPECOPS_NAME", sog = "BO1_MP_MARINE_NAME", rus = "BO1_MP_RUSSIAN_NAME", nva = "BO1_MP_NVA_NAME", cub = "BO1_MP_TROPAS_NAME" },
+	bo2  = { seals = "BO2_MP_SEALS_NAME", sdc = "BO2_MP_PLA_NAME", fbi = "BO2_MP_FBI_NAME", pmc = "BO2_MP_PMC_NAME", isa = "BO2_MP_ISA_NAME", cd = "BO2_MP_CD_NAME" },
+	mw3  = { sas = "MW3_MP_SAS", delta = "MW3_MP_DELTA_NAME", gign = "MW3_MP_GIGN", innercircle = "MW3_MP_INNERCIRCLE_NAME", militia = "MW3_MP_AFRICA_MILITIA_NAME", ussr = "MW3_MP_SPETSNAZ_NAME", pmc = "MW3_MP_PMC_NAME" },
+}
+
+function CoDHUD.Factions.GetFactionNameKey(hudtype, factionID)
+	local t = FACTION_NAME_KEYS[hudtype]
+	return (t and t[factionID]) or "MW2_MP_US_ARMY_NAME"
+end
+
 function CoDHUD.Factions.GetFactionName(factionID)
 	local c = GetConVar("codhud_game")
 	c = c and c:GetString() or "mw2"
@@ -107,7 +130,7 @@ cvars.AddChangeCallback("codhud_game", function(convar, oldValue, newValue)
                 ply:SetNW2String("CoDHUD_Faction", faction)
 
 				local textstr = "MW2_GAME_CHANGEDTO"
-				local factionName = CoDHUD.Factions[CoDHUD_GetHUDType()][faction].name
+				local factionName = CoDHUD.Factions.GetFactionNameKey(CoDHUD_GetHUDType(), faction)
 
 				net.Start("CoDHUD_PlayerAutoBalanced")
 				net.WriteString(textstr)
@@ -130,7 +153,7 @@ cvars.AddChangeCallback("codhud_game", function(convar, oldValue, newValue)
                 ply:SetNW2String("CoDHUD_Faction", faction)
 
 				local textstr = "MW2_GAME_CHANGEDTO"
-				local factionName = CoDHUD.Factions[CoDHUD_GetHUDType()][faction].name
+				local factionName = CoDHUD.Factions.GetFactionNameKey(CoDHUD_GetHUDType(), faction)
 
 				net.Start("CoDHUD_PlayerAutoBalanced")
 				net.WriteString(textstr)
@@ -183,7 +206,7 @@ concommand.Add("codhud_setfaction", function(ply, cmd, args)
     ply:SetNW2String("CoDHUD_Faction", faction)
     
 	local textstr = "MW2_GAME_CHANGEDTO"
-	local factionName = CoDHUD.Factions[CoDHUD_GetHUDType()].name or ""
+	local factionName = CoDHUD.Factions.GetFactionNameKey(CoDHUD_GetHUDType(), faction)
 
 	if factionName ~= "" then
 		net.Start("CoDHUD_PlayerAutoBalanced")
@@ -464,12 +487,25 @@ hook.Add( "player_activate", "CoDHUD_JoinRoundSync", function(data)
 	local ply = Player(id)
 
     if not IsValid(ply) then return end
-		
+
 	-- print("CoDHUD DEBUG: Player " .. ply:Nick() .. " is in faction " .. ply:GetNW2String("CoDHUD_Faction", "rangers"))
 
 	CoDHUD_AssignFaction(ply)
-	
+
 	-- print("Player " .. ply:Nick() .. " assigned to a new faction! (" .. ply:GetNW2String("CoDHUD_Faction", "rangers") .. ")")
+
+    -- "player_activate" fires for player.CreateNextBot() bots too, not just
+    -- real connecting clients (see the CoDHUD_AssignFaction comment above,
+    -- which already excludes bots for exactly this reason). This block's
+    -- own forced ply:Spawn() 0.1s later never got the same exclusion --
+    -- traced via debug.traceback() to be the actual cause of "bots spawn
+    -- stuck inside each other and die instantly": it re-spawns an
+    -- already-alive bot fresh out of SpawnBot() (sv_ffa_bots.lua), undoing
+    -- its position and re-triggering the engine's own spawn-point/kill
+    -- logic on an entity that's already alive. Bots have no client to sync
+    -- round state to anyway -- sv_ffa_bots.lua owns their entire spawn
+    -- lifecycle.
+    if ply:IsBot() then return end
 
     timer.Simple(0.1, function()
 

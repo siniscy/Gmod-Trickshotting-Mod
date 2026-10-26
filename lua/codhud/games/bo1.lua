@@ -170,10 +170,10 @@ CoDHUD.Gamemodes[hudtype] = {
 	{ "#MW2_MPUI_WAR", "war" },
 	{ "#MW2_MPUI_DEATHMATCH", "dm" },
 	{ "#MW2_MPUI_SEARCH_AND_DESTROY", "sd" },
-	{ "Gmod Sesh TDM", "sesh_war" },
-	{ "Gmod Sesh FFA", "sesh_dm" },
-	{ "Gmod Sesh S&D", "sesh_sd" },
-	{ "Gmod Sesh S&D Set", "sesh_sd_set" },
+	{ "CoDHUD.SeshMode.TDM", "sesh_war" },
+	{ "CoDHUD.SeshMode.FFA", "sesh_dm" },
+	{ "CoDHUD.SeshMode.SD", "sesh_sd" },
+	{ "CoDHUD.SeshMode.SDSet", "sesh_sd_set" },
 }
 
 CoDHUD.Gamemodes[hudtype].Hints = {
@@ -964,7 +964,7 @@ local function scorebar(data)
     if gmCV2 and gmCV2:GetString() == "sesh_dm" then
         -- Sesh FFA has its own hardwired limit, independent of codhud_score_limit
         liveScoreLimit = 30
-    elseif gmCV2 and (gmCV2:GetString() == "sesh_sd" or gmCV2:GetString() == "sesh_sd_set") then
+    elseif gmCV2 and (gmCV2:GetString() == "sd" or gmCV2:GetString() == "sesh_sd" or gmCV2:GetString() == "sesh_sd_set") then
         -- Sesh S&D wins on rounds ("first to X"), tracked by sesh_sd_rounds,
         -- not codhud_score_limit (that convar is the FFA/TDM kill limit and
         -- defaults to 75, which made the bar need 75 round wins to fill).
@@ -1101,6 +1101,7 @@ local function scoreboard( ... )
 		factions[fac] = factions[fac] or {}
 		table.insert(factions[fac], p)
 	end
+	if CoDHUD.Sesh and CoDHUD.Sesh.FillEnemyGroup then CoDHUD.Sesh.FillEnemyGroup(factions) end
 
 	local factionList = {}
 	for fac, players in pairs(factions) do
@@ -1359,6 +1360,10 @@ local function weaponinfo(...)
     local wep = ply:GetActiveWeapon()
     if not IsValid(wep) then return end
     if wep ~= lastWep then lastWep = wep wepSwitchTime = CurTime() end
+    -- Equipment (kc_equip_knife, ported items flagged SWEP.KC_IsEquipment)
+    -- keeps the name plate but never shows ammo/clip/reload text -- it has no
+    -- meaningful ammo count to a player (single use, or non-clip based).
+    local isEquipment = wep.KC_IsEquipment == true
 
     local clip    = wep:Clip1()
     local clip2   = wep:Clip2()
@@ -1408,7 +1413,7 @@ local function weaponinfo(...)
 	local clipw, cliph = surface.GetTextSize(maxClip)
 	surface.SetFont("BO1_Res")
 
-	if primType ~= -1 then
+	if not isEquipment and primType ~= -1 then
         local resCol = (primCount == 0 or primCount < maxClip) and Color(255, 120, 120, 255) or Color(255, 255, 255, 255)
 		if maxClip > 0 then
 			DrawSqueezedText(restext, "BO1_Res", ScrW() - CoDHUD_SX(CFG.RES_X) - resw, ScrH() - CoDHUD_SY(CFG.RES_Y), resCol, 0, 0, 2, 0)
@@ -1429,7 +1434,7 @@ local function weaponinfo(...)
 
 	local altCache = (altType == primType or altType == game.GetAmmoID("Grenade") and maxClip2 > 0)
 
-    if altType ~= -1 then
+    if not isEquipment and altType ~= -1 then
 		if altType ~= primType and altType ~= game.GetAmmoID("Grenade") then
 			surface.SetFont("BO1_Ammo_Alt")
 			local altLen = #tostring(altCount)
@@ -1456,7 +1461,7 @@ local function weaponinfo(...)
 		end
     end
 
-    if maxClip > 0 and clip >= 0 then
+    if not isEquipment and maxClip > 0 and clip >= 0 then
         local perc = clip / maxClip
         local isLowClip = (perc <= CFG.STAT_LOW_PERC)
 		local blink = 255 * math.abs(math.sin(RealTime() * 3))
@@ -1464,7 +1469,7 @@ local function weaponinfo(...)
         DrawSqueezedText(clip, "BO1_Res_Large", ScrW() - CoDHUD_SX(CFG.RES_X+(altCache and 12 or 0)) - resw - (altCache and clipw or 0), ScrH() - CoDHUD_SY(CFG.RES_Y * 1.15), col, 0, 0, 0)
     end
 
-    if maxClip > 0 and clip >= 0 and not reloading then
+    if not isEquipment and maxClip > 0 and clip >= 0 and not reloading then
         local perc = clip / maxClip
         local statText = ""
         local statCol = Color(255, 255, 255)

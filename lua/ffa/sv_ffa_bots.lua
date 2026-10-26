@@ -23,7 +23,9 @@ local function SafeNormalize(vec, fallback)
     return vec:GetNormalized()
 end
 
-local BOT_NAMES_POOL = { "xAlps", "Boolmaster Flex", "reha", "Nythvn", "dread", "sage", "Silverr" }
+local BOT_HEALTH = 50  -- sesh bots' health per life (players have 100)
+
+local BOT_NAMES_POOL ={ "xAlps", "Boolmaster Flex", "reha", "Nythvn", "dread", "sage", "Silverr" }
 
 -- TEMP DIAGNOSTIC for the Backlot hang investigation -- see the pathfinding
 -- block below. Remove once the root cause is confirmed.
@@ -42,14 +44,25 @@ GetConVar("sesh_bot_count_ffa"):SetInt(6)
 -- Random on first call, then fixed for the server's lifetime.
 local SessionBotNames = nil
 
+-- Combine soldiers. These MUST be real player models (models/player/...):
+-- they carry the shared player animation set (run_smg1, idle_shotgun,
+-- aim/move pose parameters), so bots animate and hold weapons exactly like
+-- any other player, live and in the killcam replay. The NPC versions
+-- (models/combine_soldier.mdl, the bundled CoD4 OpFor models) only have NPC
+-- animations and T-pose on a player.
 local BOT_MODELS = {
-    "models/player/kleiner.mdl",
-    "models/player/mossman.mdl",
-    "models/player/magnusson.mdl",
-    "models/player/alyx.mdl",
-    "models/player/barney.mdl",
-    "models/player/eli.mdl",
+    "models/player/combine_soldier.mdl",
+    "models/player/combine_soldier_prisonguard.mdl",
+    "models/player/combine_super_soldier.mdl",
 }
+for _, mdl in ipairs(BOT_MODELS) do util.PrecacheModel(mdl) end
+
+-- Re-applies the bot's model (and its skin variant) -- Spawn() resets both.
+local function ApplyBotLook(bot)
+    if not bot.SeshBotModel then return end
+    bot:SetModel(bot.SeshBotModel)
+    bot:SetSkin(bot.SeshBotSkin or 0)
+end
 
 -- Opposite factions per HUD type (bots are always the enemy faction)
 local HUD_FACTIONS = {
@@ -68,16 +81,16 @@ local FFA_Bots        = {}
 local FFA_BotPaths    = {}
 local FFA_PathUpdateT = {}
 local FFA_SpawnGeneration = 0
-local FFA_BotStuckPos    = {}
-local FFA_BotStuckTime   = {}
-local FFA_BotUnstickUntil = {}
-local FFA_BotOrbitDir    = {}
+local FFA_BotNav       = {} -- per-bot navigation / stuck-escalation state (see BOT AI — NAVIGATION)
 local FFA_BotStrafeDir   = {}
 local FFA_BotStrafeT     = {}
 local FFA_BotReactionTarget = {}
 local FFA_BotReactionUntil  = {}
 local FFA_BotFireState      = {}
 local FFA_BotFireStateUntil = {}
+local FFA_BotAimAng   = {} -- bot's current (smoothed) eye angle, per bot
+local FFA_BotAimLastT = {} -- CurTime() of that bot's last aim update, for frame-rate-independent smoothing
+local FFA_BotAimError = {} -- small per-acquisition aim inaccuracy offset, per bot
 local FFA_LastKillTarget = nil
 local FFA_KillcamBot  = nil
 local FFA_Active      = false
@@ -230,6 +243,27 @@ local function CheckAndGenerateNav()
     end
 end
 
+-- Most maps used with Gmod Sesh only carry ONE actual info_player_* entity
+-- (confirmed on the maps causing "everyone spawns in the same spot" -- see
+-- [KC Debug][NavInfo] logs from testing: spawnEnts=1 even on a map with a
+-- large, healthy 1654-area navmesh), since they were never built with a
+-- multiplayer deathmatch in mind. Relying on that single entity means every
+-- spawn AND every respawn keeps landing in the same square meter regardless
+-- of how much usable floor space the nav mesh says actually exists. This
+-- ignores map spawn entities entirely and picks a fresh random point
+-- anywhere on the nav mesh instead, so the "only one spawn" limitation
+-- never applies in the first place.
+local function GetRandomNavPoint()
+    if navAreas and #navAreas > 0 then
+        local area = navAreas[math.random(#navAreas)]
+        return area:GetRandomPoint() + Vector(0, 0, 10), Angle(0, math.random(0, 360), 0)
+    end
+    -- No navmesh yet (still generating, or generation failed) -- fall back
+    -- to whatever map spawn entities exist rather than leaving the player
+    -- at the world origin.
+    return nil, nil
+end
+
 -- ================================================================
 --  SPAWN POSITIONS
 -- ================================================================
@@ -374,7 +408,11 @@ end
 hook.Add("PlayerSpawn", "SeshBot_RestoreLoadout", function(ply)
     if not IsSeshMode() then return end
     if ply:IsBot() then
-        if ply.SeshBotModel then ply:SetModel(ply.SeshBotModel) end
+        ApplyBotLook(ply)
+        -- Fresh life, fresh navigation: no stale path/stuck state from where it died.
+        FFA_BotNav[ply] = nil
+        if FFA_BotPaths[ply] then FFA_BotPaths[ply] = { waypoints = {}, currentWaypoint = 1 } end
+        FFA_PathUpdateT[ply] = 0
         -- Re-assert the bot's faction the instant it spawns, on top of the
         -- 1-second SeshBot_FactionSync tick -- a generic, mode-unaware
         -- faction-assignment system elsewhere (round-start autobalance, HUD
@@ -382,9 +420,43 @@ hook.Add("PlayerSpawn", "SeshBot_RestoreLoadout", function(ply)
         -- faction, merging both teams into one on the scoreboard and making
         -- the S&D round bar unable to find a distinct enemy score to show.
         ply:SetNW2String("CoDHUD_Faction", GetBotFaction())
+        -- Half the normal 100 health, so bot-vs-bot fights end quicker.
+        -- Next tick: the gamemode's own spawn code runs after this hook and
+        -- would put it back to 100.
+        timer.Simple(0, function()
+            if not IsValid(ply) or not ply:Alive() then return end
+            ply:SetMaxHealth(BOT_HEALTH)
+            ply:SetHealth(BOT_HEALTH)
+        end)
         return
     end
+
+    -- Ignore the map's own (usually singular) spawn entity entirely and
+    -- drop the human somewhere random on the nav mesh instead, every single
+    -- spawn -- including every respawn after death, since this hook fires
+    -- again each time. Delayed one tick: SetPos in the same tick as the
+    -- engine's own default spawn placement doesn't reliably stick (same
+    -- reasoning as SpawnBot()'s bot positioning below).
+    local pos, ang = GetRandomNavPoint()
+    if pos then
+        timer.Simple(0, function()
+            if not IsValid(ply) or not ply:Alive() then return end
+            ply:SetPos(pos)
+            ply:SetEyeAngles(ang)
+        end)
+    end
     -- Player weapon restore is handled in PlayerLoadout below
+end)
+
+-- PlayerSpawn hooks run BEFORE the gamemode's own PlayerSpawn, whose
+-- PlayerSetModel would then put the bot back in the default (cl_playermodel)
+-- model on any spawn this file doesn't re-apply the look after (e.g. the
+-- round reset's p:Spawn()). Claiming PlayerSetModel for sesh bots stops that.
+hook.Add("PlayerSetModel", "SeshBot_SetModel", function(ply)
+    if not ply:IsBot() or not ply.SeshBotModel then return end
+    if not IsSeshMode() then return end
+    ApplyBotLook(ply)
+    return true
 end)
 
 -- Main loadout hook — fires after PlayerSpawn.
@@ -393,7 +465,37 @@ end)
 -- NOTE: we intentionally do NOT gate on CoDHUD_RoundStarting for players —
 -- RestorePlayerWeapons in SpawnPlayerAtSpawn needs this to fire correctly.
 hook.Add("PlayerLoadout", "SeshBot_LoadoutOverride", function(ply)
+    -- TEMP DIAGNOSTIC -- unconditional entry log, paired with the same kind
+    -- of log at the top of KC_Loadouts_Give's closure in
+    -- lua/codhud/sv_loadouts_give.lua, to compare which PlayerLoadout hooks
+    -- actually get invoked (and in what order) for a real spawn.
+    do
+        local msg = string.format("[KC Class][ENTRY-FFA] SeshBot_LoadoutOverride invoked, ply=%s isBot=%s", tostring(ply), tostring(IsValid(ply) and ply:IsBot()))
+        if _G.KC_ClassLog then _G.KC_ClassLog(msg) else print(msg) end
+    end
     if not IsSeshMode() then return end
+
+    -- A Create-a-Class pick (lua/codhud/sv_loadouts_give.lua) takes priority
+    -- over this FFA saved-loadout restore for real players. This used to be
+    -- enforced by registering that hook at HOOK_HIGH so it would always run
+    -- first and short-circuit this one -- but HOOK_HIGH (and every other
+    -- named hook-priority constant: HOOK_MONITOR_HIGH, HOOK_NORMAL, HOOK_LOW,
+    -- HOOK_MONITOR_LOW) turned out to be nil in this environment, so the
+    -- "priority" argument was silently being passed as nil the whole time
+    -- and both hooks actually ran at the same (default) priority. Since this
+    -- file's hook.Add call happened to register before sv_loadouts_give.lua's,
+    -- this hook always won the race and swallowed every class pick before
+    -- KC_Loadouts_Give ever got a chance to run. Checking the player's raw
+    -- convar directly here (instead of relying on hook order at all) is
+    -- immune to that ordering issue.
+    if not ply:IsBot() then
+        local kcMode = ply:GetInfo("kc_loadout_mode")
+        if kcMode ~= "" and kcMode ~= "none" then
+            local msg = string.format("[KC Class][FFA-skip] PlayerLoadout(%s): kc_loadout_mode=%q is active, letting KC_Loadouts_Give handle this spawn", ply:Nick(), kcMode)
+            if _G.KC_ClassLog then _G.KC_ClassLog(msg) else print(msg) end
+            return
+        end
+    end
 
     if ply:IsBot() then
         -- Skip during countdown — bots are armed by SeshBot_RevealAfterCountdown
@@ -413,6 +515,13 @@ hook.Add("PlayerLoadout", "SeshBot_LoadoutOverride", function(ply)
     end
 
     -- Real player: restore saved loadout if they have one
+    -- TEMP DIAGNOSTIC -- this only runs when KC_Loadouts_Give (HOOK_HIGH,
+    -- sv_loadouts_give.lua) returned nil, i.e. the player's class picked
+    -- "None" or their class didn't resolve to any installed weapon. If
+    -- you're seeing this print for a player who actually picked a class,
+    -- the class system itself is the thing failing, not this fallback.
+    local ffaFallbackMsg = string.format("[KC Class][FFA-fallback] PlayerLoadout(%s): KC class hook fell through, using FFA saved-loadout restore", ply:Nick())
+    if _G.KC_ClassLog then _G.KC_ClassLog(ffaFallbackMsg) else print(ffaFallbackMsg) end
     local data = PlayerLoadouts[ply:UserID()]
     if not data or not data.weapons or #data.weapons == 0 then
         -- First spawn — give nothing, let them pick their own loadout
@@ -448,16 +557,16 @@ local function RemoveAllBots()
     FFA_Bots        = {}
     FFA_BotPaths    = {}
     FFA_PathUpdateT = {}
-    FFA_BotStuckPos     = {}
-    FFA_BotStuckTime    = {}
-    FFA_BotUnstickUntil = {}
-    FFA_BotOrbitDir     = {}
+    FFA_BotNav          = {}
     FFA_BotStrafeDir    = {}
     FFA_BotStrafeT      = {}
     FFA_BotReactionTarget = {}
     FFA_BotReactionUntil  = {}
     FFA_BotFireState      = {}
     FFA_BotFireStateUntil = {}
+    FFA_BotAimAng   = {}
+    FFA_BotAimLastT = {}
+    FFA_BotAimError = {}
     FFA_Active      = false
     FFA_KillcamBot  = nil
     FFA_LastKillTarget = nil
@@ -492,6 +601,9 @@ local function SpawnBot(name, pos, ang)
     bot:SetPos(pos)
     bot:SetEyeAngles(ang)
     bot:SetModel(model)
+    -- Random skin variant (e.g. the orange-eyed shotgunner), kept for life.
+    bot.SeshBotSkin = math.random(0, math.max(bot:SkinCount() - 1, 0))
+    ApplyBotLook(bot)
     -- A freshly created bot's Frags isn't guaranteed to start at 0 (reused
     -- player slots can carry over a stale value), so force a clean start.
     bot:SetFrags(0)
@@ -530,32 +642,37 @@ local function SpawnBot(name, pos, ang)
     return bot
 end
 
-local function GetNavSpawnFarFrom(existing, minDist)
+local function GetNavSpawnFarFrom(existing, minDist, ply)
+    -- CoD-style spawns (lua/codhud/sv_spawns.lua): never inside anyone,
+    -- bots near their own team, far from the enemy team (everyone in FFA).
+    if KC_Spawns and KC_Spawns.Enabled() then
+        return KC_Spawns.Pick(ply, { team = (not IsValid(ply)) and GetBotFaction() or nil })
+    end
     if not navAreas or #navAreas == 0 then
         return GetSpawnFarFrom(existing, minDist)
     end
+    -- area:GetRandomPoint() instead of area:GetCenter() -- GetCenter() is a
+    -- single fixed point per area, so repeatedly picking the same (or a
+    -- small handful of) areas always lands on the exact same spot.
+    -- GetRandomPoint() samples a fresh point inside the area every call, so
+    -- spawns actually spread out across the mesh instead of clustering.
+    local bestPos, bestAng, bestD = nil, nil, -1
     for attempt = 1, 30 do
         local area = navAreas[math.random(#navAreas)]
-        local pos  = area:GetCenter()
-        local ok   = true
-        for _, ep in ipairs(existing) do
-            if pos:Distance(ep) < minDist then ok = false break end
-        end
-        if ok then
-            return pos + Vector(0, 0, 10), Angle(0, math.random(0, 360), 0)
-        end
-    end
-    local best, bestD = navAreas[1]:GetCenter(), 0
-    for _, area in ipairs(navAreas) do
-        local pos  = area:GetCenter()
+        local pos  = area:GetRandomPoint()
         local minD = math.huge
         for _, ep in ipairs(existing) do
             local d = pos:Distance(ep)
             if d < minD then minD = d end
         end
-        if minD > bestD then bestD = minD best = pos end
+        if minD >= minDist then
+            return pos + Vector(0, 0, 10), Angle(0, math.random(0, 360), 0)
+        end
+        if minD > bestD then
+            bestD, bestPos, bestAng = minD, pos, Angle(0, math.random(0, 360), 0)
+        end
     end
-    return best + Vector(0, 0, 10), Angle(0, math.random(0, 360), 0)
+    return bestPos + Vector(0, 0, 10), bestAng
 end
 
 local function SpawnAllBots()
@@ -604,8 +721,15 @@ local function SpawnAllBots()
     local mySpawnGen = FFA_SpawnGeneration + 1
     FFA_SpawnGeneration = mySpawnGen
 
+    -- DIAGNOSTIC: widened 0.15 -> 1.5 to test whether creating a new
+    -- NextBot before the previous one finishes initializing on its own
+    -- separate (much slower, ~10Hz) tick scheduler is what's re-triggering
+    -- the previous bot's spawn/loadout cycle and killing it -- every test
+    -- so far shows the previous bot dying at the exact moment the next one
+    -- is created, regardless of where either one is positioned, which rules
+    -- out spawn location as the cause entirely.
     for i, name in ipairs(names) do
-        timer.Simple((i - 1) * 0.15, function()
+        timer.Simple((i - 1) * 1.5, function()
             -- Bail if a newer SpawnAllBots call superseded this one (e.g. a
             -- fast round restart) or sesh mode ended mid-stagger.
             if FFA_SpawnGeneration ~= mySpawnGen then return end
@@ -617,8 +741,12 @@ local function SpawnAllBots()
             else
                 -- TDM/S&D: keep bots well clear of the host on the very
                 -- first spawn of the match so round 1 doesn't drop one
-                -- right next to the player for an instant death.
-                pos, ang = GetSpawnFarFrom(existing, 1400)
+                -- right next to the player for an instant death. Nav-based
+                -- like FFA now, instead of the map's own spawn entities --
+                -- most Gmod Sesh maps only have one such entity, so that
+                -- path always funneled everyone to the same spot regardless
+                -- of distance requested.
+                pos, ang = GetNavSpawnFarFrom(existing, 1400)
             end
             local bot = SpawnBot(name, pos, ang)
             if IsValid(bot) then
@@ -699,6 +827,29 @@ hook.Add("EntityTakeDamage", "SeshBot_InstantKill", function(target, dmginfo)
     dmginfo:SetDamage(target:Health() + 100)
 end)
 
+-- FFA bots correctly path toward the only human target and stay near it --
+-- normal deathmatch behavior. With spawn positions now confirmed spread out
+-- across the nav mesh (real combat/kills happen fine in testing), the
+-- remaining "stuck inside each other" cases are bots that have had time to
+-- converge on the player (or each other) before the last few in the spawn
+-- batch join, physically overlapping -- which Source resolves by force-
+-- killing the intruder (self-attributed death, no normal damage event).
+-- Disabling solid player-vs-player collision during sesh mode lets them
+-- overlap freely instead, the same trick most DM gamemodes use so players
+-- don't block each other in doorways/chokepoints.
+--
+-- NOTE: this hook is only consulted for entities with SetCustomCollisionCheck
+-- enabled, and nothing enables it -- so it never actually runs. Do NOT enable
+-- it on bots to make them pass through each other: Source applies the same
+-- rule to the shooter's bullet traces, so bots' bullets then pass straight
+-- through other bots too (bot-vs-bot kills stop happening entirely).
+hook.Add("ShouldCollide", "SeshBot_NoPlayerCollide", function(ent1, ent2)
+    if not IsSeshMode() then return end
+    if IsValid(ent1) and IsValid(ent2) and ent1:IsPlayer() and ent2:IsPlayer() then
+        return false
+    end
+end)
+
 -- ================================================================
 --  NAVMESH / MAP LOAD
 -- ================================================================
@@ -710,54 +861,275 @@ hook.Add("InitPostEntity", "SeshBot_MapLoad", function()
 end)
 
 -- ================================================================
---  BOT AI — BFS PATHFINDING
+--  BOT AI — NAVIGATION
 -- ================================================================
--- Standard BFS: an O(1) dequeue via a head index (never shifting the array),
--- and parent pointers reconstructed into a path only once, at the end,
--- instead of cloning the entire path-so-far for every neighbor of every
--- node visited. The old version's per-neighbor full-path copy made a single
--- call blow up to O(V^2)-O(V^3) on a large/poorly-connected navmesh (long
--- corridors, or a target that's briefly unreachable) -- run per bot every
--- 0.5s, synchronously on the main thread, that was long enough to freeze
--- the whole game ("stopped responding") rather than throw a catchable error.
--- MAX_VISITED is a hard safety cap so even a pathological navmesh can't
--- make a single call run unbounded.
-local MAX_BFS_VISITED = 2000
+-- Why bots used to get stuck for good:
+--   * Waypoints were nav area CENTERS. Walking center-to-center cuts
+--     diagonally across corners and door frames, straight into walls.
+--   * The BFS ignored distance and height, so it happily routed bots up
+--     ledges no player can climb and through needlessly long detours, and
+--     on bigger maps it hit its node cap and returned no path at all --
+--     leaving the bot walking straight at its target through the wall.
+--   * Waypoint arrival needed a 3D distance under 80 to the center, which
+--     some areas (stairs, centers under props) can never satisfy.
+--   * Unsticking was always the same 0.75s jump+strafe followed by the
+--     exact same path back into the same wall, forever.
+--
+-- Now: A* (distance + climb/crouch costs, unclimbable connections
+-- skipped, falls back to the closest reachable area), waypoints are the
+-- doorway crossing points between consecutive areas (nav areas are convex,
+-- so straight lines between crossings stay on walkable floor), arrival is
+-- "entered the next area", local jump/crouch/steer around props, and a
+-- stuck detector that escalates: back off -> route around the blocked
+-- area -> wander somewhere else -> (last resort, never in sight of a
+-- human) hop to a free spot on its path.
+local NAV_CLIMB_LIMIT   = 58   -- tallest connection a player can get up (crouch-jump)
+local NAV_DOOR_MARGIN   = 20   -- keep the 32-wide player hull off door frames
+local MAX_ASTAR_VISITED = 3000
+local NAV_CROUCH = NAV_MESH_CROUCH or 1
+local NAV_JUMP   = NAV_MESH_JUMP   or 2
+local NAV_AVOID  = NAV_MESH_AVOID  or 128
 
-local function BFSPath(startArea, goalArea)
-    if startArea == goalArea then return {goalArea} end
+-- Plain bitmask test on the area's attribute flags.
+local function HasNavAttr(area, flag)
+    return bit.band(area:GetAttributes() or 0, flag) ~= 0
+end
 
-    local queue    = { startArea }
-    local head     = 1
-    local cameFrom = { [startArea] = false }
-    local visitedCount = 1
+local cv_navDebug =CreateConVar("kc_bot_nav_debug", "0", FCVAR_NONE, "Print sesh bot navigation decisions (jumps, ducks, stuck escalation).")
+local function NavDebug(bot, fmt, ...)
+    if not cv_navDebug:GetBool() then return end
+    print(string.format("[Sesh Bots][Nav] %s: " .. fmt, bot:Nick(), ...))
+end
 
-    while head <= #queue do
-        local cur = queue[head]
-        head = head + 1
+local function GetBotNav(bot)
+    local nav = FFA_BotNav[bot]
+    if not nav then
+        nav = { avoid = {}, level = 0, side = (math.random(2) == 1) and 1 or -1 }
+        FFA_BotNav[bot] = nav
+    end
+    return nav
+end
 
-        for _, adj in ipairs(cur:GetAdjacentAreas()) do
-            if cameFrom[adj] == nil then
-                cameFrom[adj] = cur
-                if adj == goalArea then
-                    -- Reconstruct the path by walking parent pointers back to start
-                    local path = { adj }
-                    local node = cur
-                    while node do
-                        table.insert(path, 1, node)
-                        node = cameFrom[node]
+local function HeapPush(h, f, v)
+    local n = #h + 1
+    h[n] = { f, v }
+    while n > 1 do
+        local p = math.floor(n / 2)
+        if h[p][1] <= h[n][1] then break end
+        h[p], h[n] = h[n], h[p]
+        n = p
+    end
+end
+
+local function HeapPop(h)
+    local top = h[1]
+    local last = table.remove(h)
+    local size = #h
+    if size > 0 then
+        h[1] = last
+        local n = 1
+        while true do
+            local l, r, m = n * 2, n * 2 + 1, n
+            if l <= size and h[l][1] < h[m][1] then m = l end
+            if r <= size and h[r][1] < h[m][1] then m = r end
+            if m == n then break end
+            h[m], h[n] = h[n], h[m]
+            n = m
+        end
+    end
+    return top[2]
+end
+
+-- Returns a list of areas from startArea toward goalArea. If the goal can't
+-- be reached (or the search cap is hit), returns the path to the closest
+-- area it could reach instead of nothing, so the bot still makes progress.
+local function FindAreaPath(startArea, goalArea, avoid)
+    if startArea == goalArea then return { startArea } end
+    local now   = CurTime()
+    local goalC = goalArea:GetCenter()
+    local g, came, closed, open = { [startArea] = 0 }, { [startArea] = false }, {}, {}
+    local best, bestH = startArea, startArea:GetCenter():Distance(goalC)
+    HeapPush(open, bestH, startArea)
+
+    local visited, found = 0, nil
+    while #open > 0 do
+        local cur = HeapPop(open)
+        if not closed[cur] then
+            closed[cur] = true
+            if cur == goalArea then found = cur break end
+            visited = visited + 1
+            if visited > MAX_ASTAR_VISITED then break end
+            local curC, curG = cur:GetCenter(), g[cur]
+            for _, adj in ipairs(cur:GetAdjacentAreas()) do
+                if not closed[adj] and not ((avoid[adj] or 0) > now) then
+                    local rise = cur:ComputeAdjacentConnectionHeightChange(adj)
+                    if rise <= NAV_CLIMB_LIMIT then
+                        local adjC = adj:GetCenter()
+                        local cost = curG + curC:Distance(adjC)
+                        if rise > 20 then cost = cost + 100 end
+                        if HasNavAttr(adj, NAV_CROUCH) then cost = cost + 50 end
+                        if HasNavAttr(adj, NAV_AVOID) then cost = cost + 400 end
+                        if adj:IsUnderwater() then cost = cost + 300 end
+                        if g[adj] == nil or cost < g[adj] then
+                            g[adj], came[adj] = cost, cur
+                            local h = adjC:Distance(goalC)
+                            if h < bestH then best, bestH = adj, h end
+                            HeapPush(open, cost + h, adj)
+                        end
                     end
-                    return path
                 end
-                visitedCount = visitedCount + 1
-                if visitedCount > MAX_BFS_VISITED then
-                    return nil -- safety cap hit -- give up this cycle, try again next update
-                end
-                table.insert(queue, adj)
             end
         end
     end
-    return nil
+
+    local tail = found or ((best ~= startArea) and best) or nil
+    if not tail then return nil end
+    local path, node = {}, tail
+    while node do
+        table.insert(path, 1, node)
+        node = came[node]
+    end
+    return path
+end
+
+local function AreaRect(area)
+    local a, b = area:GetCorner(0), area:GetCorner(2)
+    return math.min(a.x, b.x), math.min(a.y, b.y), math.max(a.x, b.x), math.max(a.y, b.y)
+end
+
+-- Where to cross from area `from` into area `to`: on their shared edge, as
+-- close to `prev` as the edge allows but at least NAV_DOOR_MARGIN from
+-- either end of it, so the bot goes through the doorway, not its frame.
+local function CrossingPoint(from, to, prev)
+    local ax1, ay1, ax2, ay2 = AreaRect(from)
+    local bx1, by1, bx2, by2 = AreaRect(to)
+    local ox1, ox2 = math.max(ax1, bx1), math.min(ax2, bx2)
+    local oy1, oy2 = math.max(ay1, by1), math.min(ay2, by2)
+    local xr, yr = ox2 - ox1, oy2 - oy1
+    local M = NAV_DOOR_MARGIN
+    local x, y
+    if xr > 1 and yr <= 8 then
+        -- Shared edge runs along X
+        y = (oy1 + oy2) * 0.5
+        x = (xr > M * 2) and math.Clamp(prev.x, ox1 + M, ox2 - M) or (ox1 + ox2) * 0.5
+    elseif yr > 1 and xr <= 8 then
+        -- Shared edge runs along Y
+        x = (ox1 + ox2) * 0.5
+        y = (yr > M * 2) and math.Clamp(prev.y, oy1 + M, oy2 - M) or (oy1 + oy2) * 0.5
+    else
+        -- Stacked/diagonal/odd connection: nearest point of the next area
+        return to:GetClosestPointOnArea(prev) or to:GetCenter()
+    end
+    local p = Vector(x, y, 0)
+    p.z = math.max(from:GetZ(p), to:GetZ(p))
+    return p
+end
+
+local function BuildBotPath(startArea, goalArea, startPos, avoid)
+    local areas = FindAreaPath(startArea, goalArea, avoid)
+    if not areas or #areas < 2 then return nil end
+    local wps, index, rises = {}, {}, {}
+    local prev = startPos
+    for i = 2, #areas do
+        local p = CrossingPoint(areas[i - 1], areas[i], prev)
+        wps[i - 1] = p
+        index[areas[i]] = i - 1
+        rises[i - 1] = areas[i - 1]:ComputeAdjacentConnectionHeightChange(areas[i])
+        prev = p
+    end
+    table.remove(areas, 1)
+    -- areas[i] is the area entered through waypoint wps[i]
+    return { waypoints = wps, areas = areas, index = index, rises = rises, currentWaypoint = 1,
+             reachesGoal = areas[#areas] == goalArea }
+end
+
+local function NotPlayer(ent) return not ent:IsPlayer() end
+
+-- Is a slab of the player hull (zMin..zMax above the feet) blocked within
+-- `dist` units in direction `dir`? Other players are ignored -- bots don't
+-- collide with each other and simply wait out a human in the way.
+local function HullBlocked(from, dir, dist, zMin, zMax)
+    local tr = util.TraceHull({
+        start  = from,
+        endpos = from + dir * dist,
+        mins   = Vector(-15, -15, zMin),
+        maxs   = Vector(15, 15, zMax),
+        mask   = MASK_PLAYERSOLID,
+        filter = NotPlayer,
+    })
+    return tr.Hit
+end
+
+local function SpotIsFree(pos)
+    local tr = util.TraceHull({
+        start = pos, endpos = pos,
+        mins = Vector(-16, -16, 0), maxs = Vector(16, 16, 72),
+        mask = MASK_PLAYERSOLID,
+    })
+    return not tr.Hit
+end
+
+local function AnyHumanSees(pos)
+    for _, p in ipairs(player.GetHumans()) do
+        if p:Alive() then
+            local tr = util.TraceLine({ start = p:EyePos(), endpos = pos + Vector(0, 0, 40), mask = MASK_VISIBLE })
+            if not tr.Hit then return true end
+        end
+    end
+    return false
+end
+
+-- Last resort for a bot that's been wedged for several seconds and nothing
+-- else freed: move it to a free spot a little further along its path (or a
+-- neighbouring area). Only ever done when no human can see the bot or the
+-- destination, so nobody watches it pop.
+local function RescueTeleport(bot, pd)
+    local botPos = bot:GetPos()
+    if AnyHumanSees(botPos) then return false end
+    local cands = {}
+    if pd and pd.areas then
+        for i = (pd.currentWaypoint or 1), math.min((pd.currentWaypoint or 1) + 3, #pd.areas) do
+            cands[#cands + 1] = pd.areas[i]
+        end
+    end
+    local here = navmesh.GetNearestNavArea(botPos)
+    if here then
+        for _, a in ipairs(here:GetAdjacentAreas()) do cands[#cands + 1] = a end
+        cands[#cands + 1] = here
+    end
+    for _, area in ipairs(cands) do
+        if IsValid(area) then
+            -- A little above the floor so sloped ground doesn't count as
+            -- "occupied"; the bot just drops the last few units.
+            local spot = area:GetCenter() + Vector(0, 0, 20)
+            if spot:DistToSqr(botPos) > 32 * 32 and SpotIsFree(spot) and not AnyHumanSees(spot) then
+                bot:SetPos(spot)
+                bot:SetVelocity(-bot:GetVelocity())
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- A random area a few hops away, for a bot to wander to when its route
+-- keeps failing (gets it out of whatever pocket it's trapped in).
+local function PickWanderArea(fromArea, avoid)
+    if not fromArea then return nil end
+    local now = CurTime()
+    local cur = fromArea
+    local hops = math.random(3, 6)
+    for _ = 1, hops do
+        local opts = {}
+        for _, adj in ipairs(cur:GetAdjacentAreas()) do
+            if not ((avoid[adj] or 0) > now) and cur:ComputeAdjacentConnectionHeightChange(adj) <= NAV_CLIMB_LIMIT then
+                opts[#opts + 1] = adj
+            end
+        end
+        if #opts == 0 then break end
+        cur = opts[math.random(#opts)]
+    end
+    return (cur ~= fromArea) and cur or nil
 end
 
 hook.Add("StartCommand", "SeshBot_AI", function(bot, cmd)
@@ -777,6 +1149,13 @@ hook.Add("StartCommand", "SeshBot_AI", function(bot, cmd)
     if IsSDSet() then
         cmd:ClearMovement() cmd:ClearButtons() return
     end
+    if not bot:Alive() then
+        cmd:ClearMovement() cmd:ClearButtons() return
+    end
+    -- The engine hands bots a command that already holds IN_DUCK, so they
+    -- crouch-walked everywhere at a third of normal speed (constantly
+    -- tripping the stuck detector). Every button below is set explicitly.
+    cmd:ClearButtons()
 
     -- ── Unlimited ammo with realistic reloads ──────────────────────────────
     local wep = bot:GetActiveWeapon()
@@ -840,20 +1219,54 @@ hook.Add("StartCommand", "SeshBot_AI", function(bot, cmd)
     -- based on) has to be pushed directly, or the bot keeps whatever angle
     -- it spawned/last faced while still being allowed to pull the trigger.
     -- That's why bots looked and fired in a single fixed direction before.
+    --
+    -- Per request, bots used to snap to face a target instantly and track it
+    -- with pixel-perfect precision every tick (only the trigger itself was
+    -- gated below) -- that read as an aimbot regardless of the fire delay,
+    -- since the bot was always already looking dead at you the moment it
+    -- could shoot. Now the aim itself turns toward the target at a limited,
+    -- frame-rate-independent rate instead of snapping, and carries a small
+    -- per-acquisition inaccuracy offset instead of lining up exactly on the
+    -- target's origin.
     local dir = SafeNormalize(targetPos - botPos, bot:GetForward())
-    local ang = dir:Angle()
-    cmd:SetViewAngles(ang)
-    bot:SetEyeAngles(ang)
+    local desiredAng = dir:Angle()
+
+    if FFA_BotReactionTarget[bot] ~= target then
+        -- Re-roll the aim error only when the bot (re)acquires a target, not
+        -- every tick -- a per-tick random offset would look like screen
+        -- shake, not human imprecision.
+        FFA_BotAimError[bot] = Angle(math.Rand(-5, 5), math.Rand(-5, 5), 0)
+    end
+    desiredAng = desiredAng + (FFA_BotAimError[bot] or angle_zero)
+
+    local now = CurTime()
+    local dt  = math.Clamp(now - (FFA_BotAimLastT[bot] or now), 0, 0.5)
+    FFA_BotAimLastT[bot] = now
+
+    local curAng = FFA_BotAimAng[bot] or desiredAng
+    -- Exponential turn smoothing (frame-rate independent): lower AIM_TURN_RATE
+    -- = slower, more human turn onto target. Was an instant snap.
+    local AIM_TURN_RATE = 4.5
+    local turnFrac = 1 - math.exp(-AIM_TURN_RATE * dt)
+    curAng = LerpAngle(turnFrac, curAng, desiredAng)
+    FFA_BotAimAng[bot] = curAng
+
+    cmd:SetViewAngles(curAng)
+    bot:SetEyeAngles(curAng)
+    -- Movement math further below (moveDir:Dot(ang:Forward()/:Right())) is
+    -- written against a local named "ang" -- keep it aliased to the bot's
+    -- actual (now-smoothed) current facing instead of the instant target
+    -- direction, so strafing still reads as relative to where the bot is
+    -- really looking.
+    local ang = curAng
 
     -- Reaction delay: bots used to be able to shoot the instant they got
     -- line of sight, with zero delay and 100% uptime -- effectively an
-    -- aimbot. They still snap to face a target immediately (unchanged, per
-    -- request), but now can't actually pull the trigger until a short
-    -- randomized delay after acquiring (or re-acquiring, if they lost sight
-    -- of it) this specific target has passed.
+    -- aimbot. Widened (was 0.25-0.6s) per follow-up request for a slower,
+    -- less locked-on feel on top of the aim smoothing above.
     if FFA_BotReactionTarget[bot] ~= target then
         FFA_BotReactionTarget[bot] = target
-        FFA_BotReactionUntil[bot]  = CurTime() + math.Rand(0.25, 0.6)
+        FFA_BotReactionUntil[bot]  = CurTime() + math.Rand(0.5, 1.1)
     end
     local canFire = CurTime() >= (FFA_BotReactionUntil[bot] or 0)
 
@@ -881,106 +1294,244 @@ hook.Add("StartCommand", "SeshBot_AI", function(bot, cmd)
         end
     end
 
-    -- ── Stuck detection ─────────────────────────────────────────────────────
-    -- Bots only ever move in a straight line toward their next waypoint/
-    -- target with no obstacle avoidance, so they can walk face-first into a
-    -- wall or corner and just stand there pushing forward forever. Track
-    -- whether the bot has actually displaced over time; if it hasn't, force
-    -- a fresh path and jump/strafe free for a moment.
-    local lastPos = FFA_BotStuckPos[bot]
-    if not lastPos or botPos:Distance(lastPos) > 40 then
-        FFA_BotStuckPos[bot]  = botPos
-        FFA_BotStuckTime[bot] = CurTime()
-    elseif CurTime() - (FFA_BotStuckTime[bot] or CurTime()) > 1 then
-        -- Hasn't moved 40+ units in over a second — consider it stuck
-        FFA_BotUnstickUntil[bot] = CurTime() + 0.75
-        FFA_BotOrbitDir[bot]     = (math.random(2) == 1) and 250 or -250
-        FFA_PathUpdateT[bot]     = 0  -- force an immediate repath below
-        FFA_BotStuckTime[bot]    = CurTime()
+    -- ── Navigation state ──────────────────────────────────────────────────
+    local now = CurTime()
+    local nav = GetBotNav(bot)
+    -- After any gap in AI ticks (dead, frozen for a countdown or killcam,
+    -- standing still to reload) restart the stuck clock rather than count
+    -- the gap as being stuck.
+    if now - (nav.lastT or 0) > 0.5 then
+        nav.anchor, nav.anchorT, nav.level = botPos, now, 0
+    end
+    nav.lastT = now
+
+    local STOP_DIST = 150
+    if nav.wanderUntil and now >= nav.wanderUntil then
+        nav.wanderUntil, nav.wanderPos = nil, nil
+    end
+    local wandering = nav.wanderPos ~= nil
+    local pd = FFA_BotPaths[bot]
+    local curArea = navmesh.GetNavArea(botPos + Vector(0, 0, 8), 80)
+
+    -- ── Stuck detection (escalating) ──────────────────────────────────────
+    -- "Stuck" = hasn't got 96+ units away from where it was 1.25s ago while
+    -- trying to travel. Each repeat while still inside that circle
+    -- escalates: back off and hop -> treat the area it can't get into as
+    -- blocked and route around it -> wander to a different spot -> (only
+    -- out of every human's sight) hop to a free spot further along.
+    local closeCombat = (dist < STOP_DIST + 60) and not wandering
+    if closeCombat or nav.holding or not nav.anchor or botPos:DistToSqr(nav.anchor) > 96 * 96 then
+        nav.anchor, nav.anchorT, nav.level = botPos, now, 0
+    elseif now - nav.anchorT > 1.25 then
+        nav.anchorT = now
+        nav.level   = nav.level + 1
+        nav.side    = -nav.side
+        FFA_PathUpdateT[bot] = 0  -- force an immediate repath below
+        if nav.level == 1 then
+            nav.backoffUntil = now + 0.6
+        elseif nav.level == 2 then
+            local blocked = pd and pd.areas and pd.areas[pd.currentWaypoint]
+            if blocked then nav.avoid[blocked] = now + 15 end
+            nav.backoffUntil = now + 0.5
+        elseif nav.level >= 5 and RescueTeleport(bot, pd) then
+            print("[Sesh Bots] " .. bot:Nick() .. " was wedged -- moved it to a free spot nearby")
+            botPos = bot:GetPos()
+            nav.anchor, nav.anchorT, nav.level = botPos, now, 0
+            nav.wanderUntil, nav.wanderPos, wandering = nil, nil, false
+        else
+            -- Wander somewhere else for a bit (and keep doing so between
+            -- rescue attempts while a human can see it).
+            local wa = PickWanderArea(curArea or navmesh.GetNearestNavArea(botPos), nav.avoid)
+            if wa then
+                nav.wanderPos, nav.wanderUntil = wa:GetCenter(), now + 4
+                wandering = true
+            end
+            nav.backoffUntil = now + 0.4
+        end
+        NavDebug(bot, "stuck, escalation level %d at %s (wandering=%s waypoint=%s/%s area=%s)",
+            nav.level, tostring(botPos), tostring(wandering), tostring(pd and pd.currentWaypoint),
+            tostring(pd and pd.waypoints and #pd.waypoints), tostring(curArea and curArea:GetID()))
     end
 
-    -- ── Pathfinding — update more frequently so bots feel more alive ──────
-    if CurTime() > (FFA_PathUpdateT[bot] or 0) then
-        FFA_PathUpdateT[bot] = CurTime() + 0.5  -- was 1.5s, now 0.5s
+    -- ── Pathfinding ───────────────────────────────────────────────────────
+    if now > (FFA_PathUpdateT[bot] or 0) then
+        FFA_PathUpdateT[bot] = now + 0.5
 
-        -- Add a small random offset to the target position so bots don't
-        -- all path to the exact same spot and merge into one pile
-        local offset = Vector(
-            math.random(-80, 80),
-            math.random(-80, 80),
-            0
-        )
-        local goalPos = targetPos + offset
+        local goalPos = nav.wanderPos
+        if not goalPos then
+            -- Small random offset so bots don't all path to the exact same
+            -- spot and merge into one pile
+            goalPos = targetPos + Vector(math.random(-80, 80), math.random(-80, 80), 0)
+        end
 
         -- TEMP DIAGNOSTIC: kc_disable_bot_pathing 1 skips navmesh queries
-        -- entirely (no GetNearestNavArea/GetAdjacentAreas/BFS at all) so we
-        -- can isolate whether navmesh/pathing itself is what's freezing the
-        -- game on this map, independent of how the BFS is implemented.
+        -- entirely so we can isolate whether navmesh/pathing itself is what's
+        -- freezing the game on a map.
         if navAreas and #navAreas > 0 and not GetConVar("kc_disable_bot_pathing"):GetBool() then
-            local sa = navmesh.GetNearestNavArea(botPos)
+            local sa = curArea or navmesh.GetNearestNavArea(botPos)
             local ga = navmesh.GetNearestNavArea(goalPos)
             if sa and ga then
-                local path = BFSPath(sa, ga)
-                if path and #path > 1 then
-                    local wps = {}
-                    for _, area in ipairs(path) do table.insert(wps, area:GetCenter()) end
-                    FFA_BotPaths[bot] = { waypoints = wps, currentWaypoint = 2 }
-                end
+                FFA_BotPaths[bot] = BuildBotPath(sa, ga, botPos, nav.avoid)
+                    or { waypoints = {}, currentWaypoint = 1 }
+                pd = FFA_BotPaths[bot]
             end
         end
     end
 
-    -- ── Movement ──────────────────────────────────────────────────────────
-    local pd = FFA_BotPaths[bot]
-    local moveDir = Vector(0, 0, 0)
-
-    if pd and pd.waypoints and #pd.waypoints >= pd.currentWaypoint then
-        local wp = pd.waypoints[pd.currentWaypoint]
-        if botPos:Distance(wp) < 80 then
+    -- ── Follow the path ───────────────────────────────────────────────────
+    local nextWp
+    if pd and pd.waypoints and pd.currentWaypoint <= #pd.waypoints then
+        -- Already inside a later area of the path (overshot, got pushed,
+        -- fell)? Skip straight to the crossing after it.
+        local idx = curArea and pd.index and pd.index[curArea]
+        if idx and idx >= pd.currentWaypoint then pd.currentWaypoint = idx + 1 end
+        nextWp = pd.waypoints[pd.currentWaypoint]
+        if nextWp and math.abs(nextWp.x - botPos.x) < 24 and math.abs(nextWp.y - botPos.y) < 24
+           and math.abs(nextWp.z - botPos.z) < 72 then
             pd.currentWaypoint = pd.currentWaypoint + 1
+            nextWp = pd.waypoints[pd.currentWaypoint]
         end
-        if pd.currentWaypoint <= #pd.waypoints then
-            wp = pd.waypoints[pd.currentWaypoint]
-            moveDir = SafeNormalize(wp - botPos, dir)
-        else
-            -- Reached end of path — head directly at target
-            moveDir = dir
-        end
-    else
-        -- No path — head directly at target so bots never stand idle
-        moveDir = dir
     end
+
+    -- Past the last crossing: head for the goal itself. If the goal isn't
+    -- reachable at all (the path only got as close as it could), hold
+    -- position at the end of it instead of grinding into the wall between.
+    local aimPoint = nextWp or nav.wanderPos or targetPos
+    nav.holding = false
+    if not nextWp and not wandering and pd and pd.reachesGoal == false and pd.areas and #pd.areas > 0 then
+        aimPoint = pd.areas[#pd.areas]:GetCenter()
+        if math.abs(aimPoint.x - botPos.x) < 40 and math.abs(aimPoint.y - botPos.y) < 40 then
+            nav.holding = true
+        end
+    end
+
+    local flatDir = SafeNormalize(Vector(dir.x, dir.y, 0), bot:GetForward())
+    local moveDir = SafeNormalize(Vector(aimPoint.x - botPos.x, aimPoint.y - botPos.y, 0), flatDir)
 
     -- Blend separation force into movement direction. The sum can land on
     -- (or extremely near) exactly zero if the separation push happens to be
     -- opposite and equal to moveDir -- SafeNormalize falls back to the
     -- pre-blend moveDir rather than ever normalizing a zero vector.
+    -- Only the sideways part of the push is used, capped: a clump of bots
+    -- can produce a push several times stronger than their own movement,
+    -- and its backward part would cancel forward progress entirely (bots
+    -- "stuck" in the open); sideways it spreads them out instead.
+    separationForce.z = 0
+    separationForce = separationForce - moveDir * separationForce:Dot(moveDir)
+    if separationForce:Length() > 0.5 then
+        separationForce = separationForce:GetNormalized() * 0.5
+    end
     if separationForce:Length() > 0 then
-        moveDir = SafeNormalize(moveDir + separationForce * 0.6, moveDir)
+        moveDir = SafeNormalize(moveDir + separationForce, moveDir)
     end
 
-    if FFA_BotUnstickUntil[bot] and CurTime() < FFA_BotUnstickUntil[bot] then
-        -- Stuck against geometry — jump and strafe sideways to break free
-        -- instead of continuing to push forward into whatever is blocking it.
-        cmd:SetButtons(bit.bor(cmd:GetButtons(), IN_JUMP))
-        cmd:SetForwardMove(150)
-        cmd:SetSideMove(FFA_BotOrbitDir[bot] or 250)
+    -- ── Local obstacle handling ───────────────────────────────────────────
+    local extraButtons = 0
+    local onGround = bot:IsOnGround()
+    -- tuck = crouch-jump (only for getting up onto something; a plain hop
+    -- that lands still crouched shows as a slow crouch-walk afterwards)
+    local function Jump(tuck, why)
+        if onGround and now - (nav.jumpT or 0) > 0.5 then
+            nav.jumpT, nav.tuck = now, tuck
+            extraButtons = bit.bor(extraButtons, IN_JUMP)
+            NavDebug(bot, "jump (%s)", why)
+        end
+    end
+    local function Rotated(v, deg)
+        local a = v:Angle()
+        a.p, a.y = 0, a.y + deg
+        return a:Forward()
+    end
+
+    -- Nav mesh hints: areas flagged "jump" by the mesh, and climbing up a
+    -- ledge to the next crossing. (Crouching is NOT taken from the mesh's
+    -- crouch flag: on auto-generated meshes it reads as set on open ground,
+    -- which had bots crouch-walking everywhere. They crouch only when the
+    -- head-high probe below actually finds a low ceiling.)
+    if curArea and HasNavAttr(curArea, NAV_JUMP) then Jump(true, "nav jump area") end
+    -- Only a real ledge between the two areas (not stairs or a ramp, whose
+    -- crossings also rise but are walked up) needs a jump.
+    local rise = nextWp and pd.rises and pd.rises[pd.currentWaypoint] or 0
+    if rise > 22 and nextWp.z - botPos.z > 22
+       and math.abs(nextWp.x - botPos.x) < 64 and math.abs(nextWp.y - botPos.y) < 64 then
+        Jump(true, "ledge " .. math.Round(rise))
+    end
+
+    -- Something the nav mesh doesn't know about (a prop, a crate, a closed
+    -- door) is in the way: only checked when the bot is actually failing to
+    -- move the way it wants, so stairs and slopes don't trigger it.
+    local vel = bot:GetVelocity()
+    if onGround and (vel.x * moveDir.x + vel.y * moveDir.y) < 60 and not nav.holding and not closeCombat then
+        nav.slowT = nav.slowT or now
     else
+        nav.slowT = nil
+    end
+    if nav.detourUntil and now < nav.detourUntil then
+        moveDir = nav.detourDir
+    elseif nav.slowT and now - nav.slowT > 0.15 then
+        local low  = HullBlocked(botPos, moveDir, 32, 20, 40)
+        local high = HullBlocked(botPos, moveDir, 32, 44, 70)
+        if low and not high then
+            Jump(true, "knee-high obstacle")   -- hop up over it
+        elseif high and not low then
+            nav.duckUntil = now + 0.8           -- head-high: crouch under it
+            NavDebug(bot, "duck (head-high obstacle)")
+        elseif low and high then
+            -- Wall-like: steer around it, trying the side it last
+            -- succeeded on first so it doesn't flip-flop.
+            for _, deg in ipairs({ 45, 90, 135 }) do
+                local found = false
+                for _, s in ipairs({ nav.side, -nav.side }) do
+                    local d = Rotated(moveDir, deg * s)
+                    if not HullBlocked(botPos, d, 48, 20, 70) then
+                        nav.detourDir, nav.detourUntil, nav.side = d, now + 0.7, s
+                        moveDir, found = d, true
+                        break
+                    end
+                end
+                if found then break end
+            end
+            NavDebug(bot, "wall ahead -> %s", nav.detourUntil and nav.detourUntil > now and "detour" or "no way around")
+        else
+            NavDebug(bot, "slow but nothing ahead")
+        end
+    end
+
+    -- Tuck legs on the way up a climbing jump (crouch-jump reaches higher
+    -- ledges) but let go once falling so it lands standing; and crouch
+    -- under low ceilings.
+    local tucking = nav.tuck and not onGround and vel.z > 0 and nav.jumpT and now - nav.jumpT < 0.6
+    if tucking or (nav.duckUntil and now < nav.duckUntil) then
+        extraButtons = bit.bor(extraButtons, IN_DUCK)
+    end
+
+    -- ── Movement ──────────────────────────────────────────────────────────
+    -- Movement is relative to yaw only: with pitch included, a bot aiming
+    -- up/down at its target used to crawl because Forward() had a big Z part.
+    local flatAng = Angle(0, ang.y, 0)
+    if nav.backoffUntil and now < nav.backoffUntil then
+        -- Stuck: back away diagonally and hop instead of pushing forward
+        -- into whatever is blocking it.
+        local back = Rotated(-moveDir, 45 * nav.side)
+        Jump(false, "backing off")
+        cmd:SetForwardMove(200 * back:Dot(flatAng:Forward()))
+        cmd:SetSideMove(200 * back:Dot(flatAng:Right()))
+    elseif (dist < STOP_DIST and not wandering and separationForce:Length() < 0.1) or nav.holding then
         -- Stop closing in if already very close (prevents merging), but keep
         -- a light strafe going instead of a hard stop so bots stay moving/
         -- alive-looking rather than freezing in place next to their target.
-        local STOP_DIST = 150
-        if dist < STOP_DIST and separationForce:Length() < 0.1 then
-            if CurTime() > (FFA_BotStrafeT[bot] or 0) then
-                FFA_BotStrafeT[bot]   = CurTime() + math.random(15, 30) / 10
-                FFA_BotStrafeDir[bot] = (math.random(2) == 1) and 1 or -1
-            end
-            cmd:SetForwardMove(0)
-            cmd:SetSideMove(100 * (FFA_BotStrafeDir[bot] or 1))
-        else
-            cmd:SetForwardMove(200 * moveDir:Dot(ang:Forward()))
-            cmd:SetSideMove(200 * moveDir:Dot(ang:Right()))
+        if now > (FFA_BotStrafeT[bot] or 0) then
+            FFA_BotStrafeT[bot]   = now + math.random(15, 30) / 10
+            FFA_BotStrafeDir[bot] = (math.random(2) == 1) and 1 or -1
         end
+        cmd:SetForwardMove(0)
+        cmd:SetSideMove(100 * (FFA_BotStrafeDir[bot] or 1))
+    else
+        cmd:SetForwardMove(200 * moveDir:Dot(flatAng:Forward()))
+        cmd:SetSideMove(200 * moveDir:Dot(flatAng:Right()))
+    end
+    if extraButtons ~= 0 then
+        cmd:SetButtons(bit.bor(cmd:GetButtons(), extraButtons))
     end
 end)
 
@@ -1073,10 +1624,20 @@ local function CheckFFABotWin(attacker, victim)
         if _G.CoDHUD_SendFFALeaderboard then _G.CoDHUD_SendFFALeaderboard() end
     end)
 
-    -- No kill-of-the-human to hang a killcam on (this may have been a
-    -- bot-vs-bot kill) -- just leave the round-end/leaderboard screen up
-    -- long enough to read, then clean up like every other match-over path.
-    timer.Simple(14, SeshMatchOverCleanup)
+    -- Final killcam of the bot's winning kill (it may even be bot-vs-bot),
+    -- seen through the winning bot's eyes, then the usual match-over
+    -- cleanup. Without bot killcams, just leave the round-end/leaderboard
+    -- screen up long enough to read.
+    if Killcam.CanBeKiller and Killcam.CanBeKiller(attacker) and WaitForKillcamThenRun then
+        local botKiller = attacker
+        Killcam.PrepareKillcam(botKiller)
+        timer.Simple(12, function() Killcam.BeginFor(botKiller) end)
+        WaitForKillcamThenRun(function()
+            timer.Simple(5, SeshMatchOverCleanup)
+        end, 60)
+    else
+        timer.Simple(14, SeshMatchOverCleanup)
+    end
 end
 
 -- Bot died
@@ -1107,11 +1668,11 @@ hook.Add("PlayerDeath", "SeshBot_BotDeath", function(victim, inflictor, attacker
         for _, ply in ipairs(player.GetAll()) do
             if IsValid(ply) then table.insert(existing, ply:GetPos()) end
         end
-        local pos, ang = GetSpawnFarFrom(existing, 900)
+        local pos, ang = GetNavSpawnFarFrom(existing, 900, victim)
         victim:Spawn()
         victim:SetPos(pos)
         victim:SetEyeAngles(ang)
-        if victim.SeshBotModel then victim:SetModel(victim.SeshBotModel) end
+        ApplyBotLook(victim)
         victim:Give("weapon_smg1")
         victim:Give("weapon_shotgun")
         if math.random(2) == 1 then
@@ -1154,6 +1715,13 @@ hook.Add("PlayerDeath", "SeshBot_PlayerDeath", function(victim, inflictor, attac
             -- the match stuck in a "won" state. Wait for this death's
             -- killcam to finish, then a few seconds more, then run the same
             -- match-over cleanup the player-wins path already uses.
+            -- Final killcam of the bot's winning kill (through the bot's
+            -- eyes, like CoD), on the same timing as the player-wins path.
+            local botKiller = attacker
+            if Killcam.PrepareKillcam then Killcam.PrepareKillcam(botKiller) end
+            timer.Simple(12, function()
+                if Killcam.BeginFor then Killcam.BeginFor(botKiller) end
+            end)
             if WaitForKillcamThenRun then
                 WaitForKillcamThenRun(function()
                     timer.Simple(5, SeshMatchOverCleanup)
@@ -1241,6 +1809,7 @@ local FFA_PollTimeout = 0
 -- ================================================================
 function SeshMatchOverCleanup()
     _G.SeshBot_ShowingScoreboard = false
+    FFA_SDWinCounted = false
 
     for uid, _ in pairs(FFA_PlayerKills) do FFA_PlayerKills[uid] = 0 end
     for _, p in ipairs(player.GetAll()) do
@@ -1261,6 +1830,7 @@ function SeshMatchOverCleanup()
     FFA_Bots            = {}
     FFA_BotPaths        = {}
     FFA_PathUpdateT     = {}
+    FFA_BotNav          = {}
     FFA_KillcamBot      = nil
     FFA_LastKillTarget  = nil
     FFA_PollState       = nil
@@ -1330,7 +1900,8 @@ hook.Add("Think", "SeshBot_KillcamPoll", function()
             -- where every round-ending kill IS the match end).
             local isFinalRound = true
             if IsSD() and _G.SeshTeam then
-                _G.SeshTeam.OnSndRoundEnd("A")
+                _G.SeshTeam.OnSndRoundEnd("A", FFA_SDWinCounted)
+                FFA_SDWinCounted = false
                 isFinalRound = _G.SeshTeam.gameOver
             end
 
@@ -1448,7 +2019,7 @@ hook.Add("CoDHUD_BotKillSetKill", "SeshBot_StartKillcamPoll", function(victim, a
 
     FFA_KillcamDeathPos = victim:GetPos()
     FFA_KillcamDeathAng = victim:GetAngles()
-    FFA_KillcamModel    = victim.SeshBotModel or victim:GetModel() or "models/player/kleiner.mdl"
+    FFA_KillcamModel    = victim.SeshBotModel or victim:GetModel() or BOT_MODELS[1]
     KC_BotKillID_Server = nil
     _G.SeshBot_KillcamIDLocked = true
 
@@ -1459,8 +2030,14 @@ hook.Add("CoDHUD_BotKillSetKill", "SeshBot_StartKillcamPoll", function(victim, a
     -- For S&D, display the match round score (e.g. "1-0") instead of
     -- per-round kill counts. Player team always wins this round (allDead).
     if IsSD() and _G.SeshTeam then
+        -- Count the round win right now, so the scorebar fills the moment
+        -- the round ends (like CoD, and like a bot-team win already does);
+        -- SeshBot_KillcamPoll does the rest once the killcam is over.
         local ST = _G.SeshTeam
-        winnerScore = ST.roundsA + 1
+        ST.roundsA = ST.roundsA + 1
+        ST.BroadcastScores()
+        FFA_SDWinCounted = true
+        winnerScore = ST.roundsA
         loserScore  = ST.roundsB
     elseif IsTDM() and _G.SeshTeam then
         -- Show the team's combined total, not just the final scorer's personal count
@@ -1482,6 +2059,7 @@ hook.Add("CoDHUD_BotKillSetKill", "SeshBot_StartKillcamPoll", function(victim, a
     -- actually got the winning kill, not the first player in player.GetAll()
     -- (which on a listen server is always the host).
     _G.KC_PendingKiller = attacker
+    if Killcam.PrepareKillcam then Killcam.PrepareKillcam(attacker) end
 
     timer.Simple(12, function()
         Killcam.BeginFor(_G.KC_PendingKiller)
@@ -1512,11 +2090,11 @@ _G.SeshBot_ResetRound = function()
 
     for bot, data in pairs(FFA_Bots) do
         if IsValid(bot) then
-            local pos, ang = GetSpawnFarFrom(existing, 1400)
+            local pos, ang = GetNavSpawnFarFrom(existing, 1400, bot)
             bot:Spawn()
             bot:SetPos(pos)
             bot:SetEyeAngles(ang)
-            if bot.SeshBotModel then bot:SetModel(bot.SeshBotModel) end
+            ApplyBotLook(bot)
             -- Keep hidden/frozen/invulnerable until the round countdown ends
             bot:SetNoDraw(true)
             bot:SetNotSolid(true)
@@ -1606,6 +2184,10 @@ hook.Add("Think", "SeshBot_FactionSync", function()
     FFA_FactionTimer = CurTime() + 0.25
 
     local botFaction = GetBotFaction()
+    -- Networked to every client so the faction scoreboard can always show the
+    -- enemy team's spot (cl_sesh_factions.lua), even before any bot's own
+    -- faction has reached them.
+    SetGlobal2String("KC_SeshBotFaction", botFaction)
     for bot, _ in pairs(FFA_Bots) do
         if IsValid(bot) then
             -- Log any actual mismatch this loop corrects -- if the team-merge

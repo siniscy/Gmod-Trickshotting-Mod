@@ -9,6 +9,19 @@ if SERVER then
 end
 
 CreateConVar("codhud_time_limit", "10", {FCVAR_REPLICATED, FCVAR_ARCHIVE, FCVAR_NOTIFY}, "Sets the match time limit, measured in minutes.")
+
+-- Same story as codhud_score_limit above: an archived "0" here (Time Limit
+-- toggled off in the lobby at some point, or leftover from testing) silently
+-- kills the round-timer display for every HUD/gamemode with nothing else
+-- wrong. Reset a stuck "0" back to the convar's own default once per server
+-- start -- unlike score_limit this isn't hardwired every boot, so toggling
+-- it off intentionally via the lobby mid-session still works normally.
+if SERVER then
+    local tlCV = GetConVar("codhud_time_limit")
+    if tlCV and tlCV:GetFloat() <= 0 then
+        tlCV:SetInt(10)
+    end
+end
 CreateConVar("codhud_matchstart_timer", "10", {FCVAR_REPLICATED, FCVAR_ARCHIVE, FCVAR_NOTIFY}, "Sets the match start timer.")
 CreateConVar("codhud_friendly_fire", "0", {FCVAR_REPLICATED, FCVAR_ARCHIVE, FCVAR_NOTIFY}, "If 0, players on the same faction cannot damage each other.")
 
@@ -90,7 +103,8 @@ if SERVER then
         codhud_restrictfactions = true,
         codhud_selected_gamemode = true,
         codhud_autofaction_limit = true,
-        kc_fastlast_enabled = true
+        kc_fastlast_enabled = true,
+        kc_godmode_enabled = true
     }
 
     net.Receive("CoDHUD_SetConVar", function(_, ply)

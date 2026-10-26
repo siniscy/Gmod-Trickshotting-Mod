@@ -290,7 +290,7 @@ local function OpenLobby()
     frame:MakePopup()
     frame.Paint = function(self, sw, sh)
         PaintAbstractBackground(sw, sh)
-        draw.SimpleText("PRIVATE MATCH", "DermaLarge", 60, 50, COL_TITLE, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+        draw.SimpleText(language.GetPhrase("CoDHUD.Lobby.PrivateMatch"), "DermaLarge", 60, 50, COL_TITLE, TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
         -- Killcam preview lives on the 2D HUDPaint layer, which always
         -- renders BELOW any open VGUI panel -- this full-screen lobby frame
         -- was blocking it out completely. Paint it here instead, after our
@@ -339,12 +339,12 @@ local function OpenLobby()
 
     local gameSetupPanel -- forward decl, built below, toggled by the menu item
 
-    CreateMenuItem(sidebar, "START GAME", isHost, function()
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.StartGame"), isHost, function()
         net.Start("CoDHUD_StartRound")
         net.SendToServer()
     end):Dock(TOP)
 
-    CreateMenuItem(sidebar, "GAME SETUP", isHost, function()
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.GameSetup"), isHost, function()
         if IsValid(gameSetupPanel) then
             gameSetupPanel:SetVisible(not gameSetupPanel:IsVisible())
         end
@@ -352,11 +352,15 @@ local function OpenLobby()
 
     CreateDivider(sidebar)
 
-    CreateMenuItem(sidebar, "CALLSIGN", true, function()
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.Classes"), true, function()
+        RunConsoleCommand("kc_classmenu")
+    end):Dock(TOP)
+
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.Callsign"), true, function()
         RunConsoleCommand("kc_menu")
     end):Dock(TOP)
 
-    CreateMenuItem(sidebar, "BARRACKS", false):Dock(TOP)
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.Barracks"), false):Dock(TOP)
 
     CreateDivider(sidebar)
 
@@ -367,7 +371,7 @@ local function OpenLobby()
     -- (a platform-level safety gate with no Lua-side bypass), then the real
     -- overlay opens on this friends page -- the native Friends dock icon at
     -- the bottom of that overlay is one click from there.
-    CreateMenuItem(sidebar, "INVITE", true, function()
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.Invite"), true, function()
         local connectStr = "connect " .. game.GetIPAddress()
         SetClipboardText(connectStr)
         gui.OpenURL("https://steamcommunity.com/my/friends/")
@@ -375,17 +379,17 @@ local function OpenLobby()
 
     CreateDivider(sidebar)
 
-    CreateMenuItem(sidebar, "DISCONNECT", true, function()
-        Derma_Query("Are you sure you want to disconnect?", "Disconnect",
-            "Yes", function() RunConsoleCommand("disconnect") end,
-            "No")
+    CreateMenuItem(sidebar, language.GetPhrase("CoDHUD.Lobby.Disconnect"), true, function()
+        Derma_Query(language.GetPhrase("CoDHUD.Lobby.DisconnectConfirm"), language.GetPhrase("CoDHUD.Lobby.DisconnectTitle"),
+            language.GetPhrase("CoDHUD.Lobby.Yes"), function() RunConsoleCommand("disconnect") end,
+            language.GetPhrase("CoDHUD.Lobby.No"))
     end):Dock(TOP)
 
     -- ── Inline Game Setup panel (host only, toggled via the menu item) ───
     if isHost then
         gameSetupPanel = vgui.Create("DPanel", frame)
         gameSetupPanel:SetPos(460, 130)
-        gameSetupPanel:SetSize(360, 268)
+        gameSetupPanel:SetSize(360, 336)
         gameSetupPanel:SetVisible(false)
         gameSetupPanel.Paint = function(self, pw, ph)
             draw.RoundedBox(2, 0, 0, pw, ph, COL_PANEL)
@@ -401,7 +405,7 @@ local function OpenLobby()
             return lbl
         end
 
-        SectionLabel(12, "GAMEMODE")
+        SectionLabel(12, language.GetPhrase("CoDHUD.Lobby.Gamemode"))
 
         local combo = vgui.Create("DComboBox", gameSetupPanel)
         combo:SetPos(15, 40)
@@ -423,7 +427,7 @@ local function OpenLobby()
         end
 
         -- HUD select (which CoD game's look/factions to use)
-        SectionLabel(76, "HUD")
+        SectionLabel(76, language.GetPhrase("CoDHUD.Lobby.HUD"))
 
         local hudCombo = vgui.Create("DComboBox", gameSetupPanel)
         hudCombo:SetPos(15, 104)
@@ -445,9 +449,15 @@ local function OpenLobby()
 
         local currentHUD = GetConVar("codhud_game"):GetString()
         for _, choice in ipairs(hudChoices) do
-            hudCombo:AddChoice(choice[1], choice[2])
+            -- hud.name is a "#CoDHUD.Type.xxx" phrase key -- DComboBox
+            -- doesn't auto-translate "#"-prefixed choice text the way
+            -- DLabel/DButton do, so without this it showed the raw
+            -- "#CoDHUD.Type.mw2" key instead of "Modern Warfare 2". The
+            -- gamemode combo just above already does this correctly.
+            local hudName = language.GetPhrase(choice[1])
+            hudCombo:AddChoice(hudName, choice[2])
             if choice[2] == currentHUD then
-                hudCombo:SetValue(choice[1])
+                hudCombo:SetValue(hudName)
             end
         end
 
@@ -458,7 +468,7 @@ local function OpenLobby()
         end
 
         -- Pregame (match start) timer
-        local timerLbl = SectionLabel(140, "PREGAME TIMER")
+        local timerLbl = SectionLabel(140, language.GetPhrase("CoDHUD.Lobby.PregameTimer"))
 
         local timerSlider = vgui.Create("DNumSlider", gameSetupPanel)
         timerSlider:SetPos(10, 158)
@@ -483,7 +493,7 @@ local function OpenLobby()
         -- Fast Last (testing convenience toggle)
         local fastLast = vgui.Create("DCheckBoxLabel", gameSetupPanel)
         fastLast:SetPos(15, 198)
-        fastLast:SetText("Fast Last (next kill ends round)")
+        fastLast:SetText(language.GetPhrase("CoDHUD.Lobby.FastLast"))
         fastLast:SizeToContents()
         local fastLastCV = GetConVar("kc_fastlast_enabled")
         if fastLastCV then fastLast:SetValue(fastLastCV:GetBool() and 1 or 0) end
@@ -500,7 +510,7 @@ local function OpenLobby()
 
         local timeLimitToggle = vgui.Create("DCheckBoxLabel", gameSetupPanel)
         timeLimitToggle:SetPos(15, 226)
-        timeLimitToggle:SetText("Show Time Limit (round also ends on time)")
+        timeLimitToggle:SetText(language.GetPhrase("CoDHUD.Lobby.ShowTimeLimit"))
         timeLimitToggle:SizeToContents()
         timeLimitToggle:SetValue((timeLimitCV and timeLimitCV:GetFloat() > 0) and 1 or 0)
         timeLimitToggle.OnChange = function(_, val)
@@ -513,6 +523,31 @@ local function OpenLobby()
                 CoDHUD_SetServerConVar("codhud_time_limit", "0")
             end
         end
+
+        -- God Mode (host's team only, never bots) -- only does anything in Sesh S&D Set,
+        -- so the disclaimer sits right under the checkbox.
+        local function PhraseOr(key, fallback)
+            local p = language.GetPhrase(key)
+            return (p == key) and fallback or p
+        end
+
+        local godMode = vgui.Create("DCheckBoxLabel", gameSetupPanel)
+        godMode:SetPos(15, 254)
+        godMode:SetText(PhraseOr("CoDHUD.Lobby.GodMode", "God Mode (host's team only, no bots)"))
+        godMode:SizeToContents()
+        local godModeCV = GetConVar("kc_godmode_enabled")
+        if godModeCV then godMode:SetValue(godModeCV:GetBool() and 1 or 0) end
+        godMode.OnChange = function(_, val)
+            CoDHUD_SetServerConVar("kc_godmode_enabled", val and "1" or "0")
+        end
+
+        local godNote = vgui.Create("DLabel", gameSetupPanel)
+        godNote:SetPos(36, 276)
+        godNote:SetSize(310, 44)
+        godNote:SetFont("DermaDefault")
+        godNote:SetTextColor(Color(230, 170, 80))
+        godNote:SetWrap(true)
+        godNote:SetText(PhraseOr("CoDHUD.Lobby.GodModeNote", "Only works in Sesh S&D Set. It does nothing in any other gamemode."))
     end
 
     -- ── Top-right: player roster ─────────────────────────────────────────
@@ -528,7 +563,7 @@ local function OpenLobby()
     recLbl:DockMargin(14, 8, 14, 0)
     recLbl:SetFont("KC_Lobby_CardText")
     recLbl:SetTextColor(Color(190, 190, 190))
-    recLbl:SetText("Recommended Max Players: " .. tostring(game.MaxPlayers()))
+    recLbl:SetText(string.format(language.GetPhrase("CoDHUD.Lobby.RecommendedMaxPlayers"), tostring(game.MaxPlayers())))
 
     local scroll = vgui.Create("DScrollPanel", rosterPanel)
     scroll:Dock(FILL)

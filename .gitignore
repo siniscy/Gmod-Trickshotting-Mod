@@ -3,3 +3,17 @@ models/
 resource/
 sound/
 call_of_duty_hud_collection_mini_dm_gamemode_3720590485/
+
+# Third-party Workshop packs kept locally for reference (not ours to redistribute)
+call_of_duty_4_equipment_528146710/
+call_of_duty_black_ops_ii_weapons_pack_original_299164995/
+
+# Design reference screenshots / PSDs
+bo1 killcam/
+mw3 killcam/
+
+# Old killcam implementation kept for reference
+_killcam_legacy/
+
+# Local tooling
+.claude/
