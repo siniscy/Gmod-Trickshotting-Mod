@@ -31,6 +31,7 @@
 - [Console commands](#-console-commands)
 - [ConVars reference](#%EF%B8%8F-convars-reference)
 - [Project layout](#-project-layout)
+- [Changelog](#-changelog)
 - [Credits](#-credits)
 - [Disclaimer](#%EF%B8%8F-disclaimer)
 
@@ -500,6 +501,19 @@ lua/
 ├── xpgui/ · scalar/         UI toolkit & resolution scaling
 └── killcam_cfg.lua · killcam_lang.lua
 ```
+
+---
+
+## 📝 Changelog
+
+### Unreleased (on `main`, not in the release zip yet)
+
+**Fixed**
+- **Bouncing Betty and the MW3 smoke grenade acted like normal guns** in Create a Class (the World at War and Modern Warfare 3 presets, or picked as Custom equipment). They showed up in the weapon cycle with a gun HUD instead of sitting in the equipment slot. This happened when **dread's mega pack** or **reha's sweps v1** was also installed: those packs ship their own copies of the same two weapons, and Garry's Mod loaded theirs. Both are now treated as equipment whichever copy loads.
+
+To get this before the next release, copy [`lua/autorun/sh_kc_equipment_overrides.lua`](lua/autorun/sh_kc_equipment_overrides.lua) into the same folder in your install.
+
+Notes for v1.0.2 and earlier are on the **[Releases](https://github.com/siniscy/Gmod-Trickshotting-Mod/releases)** page.
 
 ---
 
