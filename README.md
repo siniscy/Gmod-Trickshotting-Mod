@@ -78,7 +78,7 @@ Everything is configured through an in-game **Private Match lobby** and the **Co
 - **Fast Last**: after your first kill, the score jumps to one kill from the limit, so the next kill is the final killcam.
 - **Create a Class**: six preset classes (BO2, MW3, BO1, MW2, WaW, MW1), a Custom class, or No Class. Press **K** mid-match to change it.
 - **Knife on R3** for CoD4 Equipment weapons, plus a thrown knife and claymores.
-- **CoD-style spawns**: you never spawn inside anyone, enemies spawn far away, and teammates spawn together.
+- **CoD-style spawns**: you never spawn inside anyone, enemies spawn far away, and teammates spawn together. Anyone who spawns stuck in a wall or prop is moved out.
 - **Weapon dropping**, a global spread multiplier, explosive bullets (non-Sesh modes only), lerped viewmodels and a third-person hold-type fix.
 
 ### 🧰 SteezMod v1b (by reha), built in
@@ -161,19 +161,19 @@ Start a **listen server** (Start New Game, with 2 or more player slots) on a map
 | `+showscores` (Tab) | CoD scoreboard | Scroll wheel scrolls the scoreboard. |
 | `kc_classmenu` | Open Create a Class | Same as **K**. |
 | `kc_menu` | Killcam **playercard** customizer | Also in the lobby under **Callsign**. |
-| `codhud_openmenu` | **CoD HUD Settings** | Also in the C-menu (desktop icon) and under Q-menu › Options. |
+| **O** / `codhud_openmenu` | Open or close **CoD HUD Settings** | Also in the C-menu (desktop icon) and under Q-menu › Options. Ignored while typing. |
 
-> **K** and **L** are read from the raw key state, so they work without binding anything and don't change your existing binds.
+> **K**, **L** and **O** are read from the raw key state, so they work without binding anything and don't change your existing binds.
 
 ### Controller
 
-Turn on with `kc_controller 1`, or in **CoD HUD Settings › Controller**. Keyboard and mouse keep working while it's on.
+Turn on with `kc_controller 1`, or tick **Controller** in **CoD HUD Settings › Settings › Controller**. Keyboard and mouse keep working while it's on.
 
 ```
             LT  Aim                                   RT  Fire
             LB  Equipment (kc_equip / instaswap)      RB  Load position
      ┌─────────────────────────────────────────────────────────┐
-     │   Back: Pause menu                Start: Scoreboard (hold)
+     │   Select: Scoreboard (hold)       Start: Pause menu
      │
      │   L-Stick: Move                   Y: Weapon switch (invprev)
      │   L3: Sprint (CoD latch)       X: Reload (tap)   B: Crouch
@@ -197,7 +197,8 @@ Turn on with `kc_controller 1`, or in **CoD HUD Settings › Controller**. Keybo
 | **R3** | Knife (`kc_cod4_knife_stick`) |
 | **D-pad left** | S&D Set: move bot to crosshair (host) |
 | **D-pad down** | Noclip |
-| **Back** / **Start** | Pause menu / scoreboard (hold) |
+| **Select (Back)** | Scoreboard, held like Tab |
+| **Start** | Pause menu |
 
 **Tuning the sticks**
 
@@ -208,9 +209,9 @@ Turn on with `kc_controller 1`, or in **CoD HUD Settings › Controller**. Keybo
 | `kc_controller_look_curve` | `1` | `1` = linear. Higher values give finer aim near the centre. |
 | `kc_controller_deadzone` | `0.08` | Inner deadzone of the look stick (0–1) |
 | `kc_controller_outer` | `0.845` | How far the stick must be pushed to count as full deflection (0–1) |
-| `kc_controller_invert_y` | `0` | Invert look up/down |
+| `kc_controller_invert_y` | `0` | Invert look up/down (console only) |
 | `kc_controller_sprint_latch` | `1` | Tap L3 to keep sprinting |
-| `kc_controller_measure` | — | Spin using any other setup. It measures the speed and copies it into `look_speed`. |
+| `kc_controller_measure` | — | Spin using any other setup. It measures the speed and copies it into `look_speed`. Console only. |
 | `kc_controller_debug` | — | Prints raw stick and trigger values for 5 seconds |
 
 > [!NOTE]
@@ -380,6 +381,7 @@ Nothing in the live game is moved, respawned or re-simulated. The killcam is pur
 | `kc_spawn_enabled` | `1` | CoD-style spawn selection |
 | `kc_spawn_enemy_min` | `1200` | Preferred minimum distance from enemies (units) |
 | `kc_spawn_mate_range` | `500` | Teammates prefer to spawn within this distance |
+| `kc_spawn_unstick` | `1` | Moves anyone who spawns inside a wall, prop or player to the nearest free spot |
 | `sv_spread_multiplier` | `1` | Global bullet spread (0 = laser) |
 | `eb_enabled` / `eb` | `0` / `25` | Explosive bullets and blast radius (non-Sesh modes only) |
 | `get_sleightofhand` / `get_reversereload` | `0` | Perks used by some preset-class weapons |
@@ -505,6 +507,21 @@ lua/
 ---
 
 ## 📝 Changelog
+
+### v1.0.4
+
+**Added**
+- **O opens and closes CoD HUD Settings.** No bind needed, and it's ignored while you're typing in chat or the console.
+- **Spawn unstick.** Every time a player or bot spawns, the server checks they aren't inside a wall, prop, map collision or another player. If they are, they're moved to the nearest free spot with floor under it (spots on the same side of any wall come first). It works whichever spawn system placed them. Turn it off with `kc_spawn_unstick 0`.
+
+**Changed**
+- **Controller: Select (Back) now holds the scoreboard**, like Tab on keyboard. Start opens the pause menu.
+- **CoD HUD Settings cleaned up:**
+  - The **Server** tab is gone. Match setup (HUD, gamemode, timers, Fast Last, God Mode) is all in the Private Match lobby.
+  - **Faction Select** is gone.
+  - In **Settings › Controller**, the *Input* dropdown is replaced by one **Controller** checkbox: tick it for `kc_controller 1`, untick for keyboard & mouse.
+  - **Invert Look** and **Measure My Spin Speed** are no longer in the menu. They still work from the console (`kc_controller_invert_y`, `kc_controller_measure`).
+- The killcam archive skips entities marked `KC_NoArchive`, so add-ons that spawn hundreds of invisible collision pieces don't cause GC freezes.
 
 ### v1.0.3
 

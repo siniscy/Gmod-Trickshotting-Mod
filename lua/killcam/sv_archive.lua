@@ -117,6 +117,9 @@ local PROJECTILE_CLASSES = {
 
 local function ShouldTrack(ent)
     if not IsValid(ent) or ent:IsPlayer() or ent:IsWeapon() then return false end
+    -- Scripted entities can opt out. The map collision fix (coll_mesh) spawns hundreds of invisible
+    -- ones; archiving them every tick made ~20 MB/s of garbage and long GC freezes on turbine.
+    if ent.KC_NoArchive then return false end
     if ent:IsNPC() or (ent.IsNextBot and ent:IsNextBot()) then return true end
     local class = ent:GetClass()
     -- Hands / viewmodels / anything parented follow another entity and are

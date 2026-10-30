@@ -11,7 +11,7 @@
 --   X   reload (a tap)          Y   weapon switch (invprev)
 --   LB  kc_equip (instaswap)    RB  loadpos
 --   L3  sprint (CoD latch)      R3  knife (sh_cod4_knife_stick.lua)
---   Back  pause menu            Start  scoreboard (held)
+--   Back (Select)  scoreboard (held)   Start  pause menu
 --   D-pad up  weapon switch     D-pad right  reload
 --   D-pad down  noclip          D-pad left  S&D Set bot placement (cl_sesh_sd_set.lua)
 --   Left stick  move            Right stick  look
@@ -173,8 +173,8 @@ local PRESS_ACTIONS = {
     [KEY_XBUTTON_LEFT_SHOULDER]  = function() PressBind("kc_equip") end,
     [KEY_XBUTTON_RIGHT_SHOULDER] = function() PressBind("loadpos") end,
     [KEY_XBUTTON_DOWN]           = function() PressBind("noclip") end,
-    [KEY_XBUTTON_BACK]           = function() gui.ActivateGameUI() end,
-    [KEY_XBUTTON_START]          = { press = function() RunConsoleCommand("+showscores") end,
+    [KEY_XBUTTON_START]          = function() gui.ActivateGameUI() end,
+    [KEY_XBUTTON_BACK]           = { press = function() RunConsoleCommand("+showscores") end,
                                      release = function() RunConsoleCommand("-showscores") end },
 }
 
@@ -182,12 +182,12 @@ local wasDown = {}
 
 hook.Add("Think", "KC_Controller_Buttons", function()
     if not cvMode:GetBool() then
-        if wasDown[KEY_XBUTTON_START] then RunConsoleCommand("-showscores") end
+        if wasDown[KEY_XBUTTON_BACK] then RunConsoleCommand("-showscores") end
         wasDown = {}
         return
     end
 
-    -- While a menu is up every button reads as released, so a held Start
+    -- While a menu is up every button reads as released, so a held Select
     -- still lets go of the scoreboard.
     local blocked = InputBlocked()
 

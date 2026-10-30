@@ -386,7 +386,9 @@ end
 
 local CoDHUD_SETTINGS = {
 	{ name = "#CoDHUD.Client", subtabs = {
-			{ name = "#CoDHUD.Faction.Select", categories = {
+			-- Faction Select is left out of the menu; teams are handed out by
+			-- the lobby / autobalance instead.
+			{ name = "#CoDHUD.Faction.Select", hidden = true, categories = {
 				{ name = "#CoDHUD.Faction.Select", type = "factions" } }
 			},
 
@@ -475,31 +477,14 @@ local CoDHUD_SETTINGS = {
 							{ type = "label", label = "#CoDHUD.Challenges.Reset.desc" },
 						}
 					},
+					-- Invert Look and Measure My Spin Speed are console-only now
+					-- (kc_controller_invert_y / kc_controller_measure).
 					{ name = "#CoDHUD.Controller", controls = {
-							{ type = "combobox",	label = "#CoDHUD.Controller.Mode", tooltip = "CoDHUD.Controller.Mode.desc",
-								choices = {
-									{ "#CoDHUD.Controller.Mode.KBM", "0" },
-									{ "#CoDHUD.Controller.Mode.Pad", "1" },
-								},
-								getCurrent = function()
-									local cv = GetConVar("kc_controller")
-									return cv and cv:GetString() or "0"
-								end,
-								onSelect = function(_, value)
-									RunConsoleCommand("kc_controller", value)
-								end
-							},
+							{ type = "checkbox",	label = "#CoDHUD.Controller.Enable",	convar = "kc_controller",				tooltip = "CoDHUD.Controller.Enable.desc" },
 							{ type = "slider",		label = "#CoDHUD.Controller.LookSpeed",	convar = "kc_controller_look_speed",	min = 50, max = 1500, decimals = 0, tooltip = "CoDHUD.Controller.LookSpeed.desc" },
 							{ type = "slider",		label = "#CoDHUD.Controller.Curve",		convar = "kc_controller_look_curve",	min = 1, max = 3, decimals = 2, tooltip = "CoDHUD.Controller.Curve.desc" },
 							{ type = "slider",		label = "#CoDHUD.Controller.Deadzone",	convar = "kc_controller_deadzone",		min = 0, max = 0.5, decimals = 2, tooltip = "CoDHUD.Controller.Deadzone.desc" },
-							{ type = "checkbox",	label = "#CoDHUD.Controller.InvertY",	convar = "kc_controller_invert_y",		tooltip = "CoDHUD.Controller.InvertY.desc" },
 							{ type = "checkbox",	label = "#CoDHUD.Controller.SprintLatch",	convar = "kc_controller_sprint_latch",	tooltip = "CoDHUD.Controller.SprintLatch.desc" },
-							{ type = "button",	label = "#CoDHUD.Controller.Measure",
-								func = function()
-									if IsValid(codhud_menu_frame) then codhud_menu_frame:SetVisible(false) end
-									RunConsoleCommand("kc_controller_measure")
-								end
-							},
 							{ type = "label", label = "#CoDHUD.Controller.Layout" },
 						}
 					},
@@ -513,7 +498,9 @@ local CoDHUD_SETTINGS = {
 		}
 	},
 
-    { name = "#CoDHUD.Server", subtabs = {
+	-- Hidden: match setup lives in the Private Match lobby. The convars and
+	-- net messages behind it are untouched, so the lobby still drives them.
+    { name = "#CoDHUD.Server", hidden = true, subtabs = {
             { name = "#CoDHUD.Server", adminOnly = true, categories = {
                     { name = "#CoDHUD.General", adminOnly = true, controls = {
                             { type = "checkbox", label = "#CoDHUD.Admin.EndScreen", server = true, convar = "codhud_enable_roundend", tooltip = "CoDHUD.Admin.EndScreen.desc" },
@@ -985,6 +972,8 @@ concommand.Add("codhud_openmenu", function()
 	sheet.Paint = nil
 
 	for _, tab in ipairs(CoDHUD_SETTINGS) do
+		if tab.hidden then continue end
+
 		local tabPanel = vgui.Create("DPanel", sheet)
 		tabPanel:Dock(FILL)
 		tabPanel.Paint = nil
@@ -994,6 +983,8 @@ concommand.Add("codhud_openmenu", function()
 		subSheet.Paint = nil
 
 		for _, subtab in ipairs(tab.subtabs or {}) do
+			if subtab.hidden then continue end
+
 			local subPanel = vgui.Create("DScrollPanel", subSheet)
 			subPanel.Paint = nil
 
@@ -1006,4 +997,29 @@ concommand.Add("codhud_openmenu", function()
 
 		sheet:AddSheet(language.GetPhrase(tab.name), tabPanel)
 	end
+end)
+
+-- "O" opens / closes this menu, the same raw-key way "K" opens Create a Class
+-- (cl_class_menu.lua), so it needs no bind and leaves existing binds alone.
+local function CoDHUD_MenuOpen()
+	return IsValid(codhud_menu_frame) and codhud_menu_frame:IsVisible()
+end
+
+local CoDHUD_MenuKeyWasDown = false
+hook.Add("Think", "CoDHUD_Menu_KeyBind", function()
+	local down = input.IsKeyDown(KEY_O)
+	if down and not CoDHUD_MenuKeyWasDown and not gui.IsConsoleVisible() and not gui.IsGameUIVisible() then
+		-- Don't hijack "o" while it's being typed into chat or any text box
+		-- (including the ones inside this menu).
+		local focus = vgui.GetKeyboardFocus()
+		local typing = IsValid(focus) and focus:GetClassName() == "TextEntry"
+
+		if CoDHUD_MenuOpen() then
+			if not typing then codhud_menu_frame:Close() end
+		elseif not IsValid(focus) then
+			if IsValid(codhud_menu_frame) then codhud_menu_frame:Remove() end
+			RunConsoleCommand("codhud_openmenu")
+		end
+	end
+	CoDHUD_MenuKeyWasDown = down
 end)
