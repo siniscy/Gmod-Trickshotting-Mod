@@ -227,6 +227,12 @@ local navAreas = nil
 
 local function CheckAndGenerateNav()
     local areas = navmesh.GetAllNavAreas()
+    -- At InitPostEntity the map's saved .nav isn't loaded yet, which made
+    -- every map load regenerate a navmesh it already had. Load it first.
+    if (not areas or #areas == 0) and navmesh.Load then
+        navmesh.Load()
+        areas = navmesh.GetAllNavAreas()
+    end
     if areas and #areas > 0 then
         navAreas = areas
         print("[Sesh Bots] Navmesh ready (" .. #areas .. " areas).")
@@ -242,6 +248,13 @@ local function CheckAndGenerateNav()
         end)
     end
 end
+
+-- The CoD map collision fix (coll_fix addon) builds its maps' navmesh in Lua
+-- and can rebuild it mid-session (cod_nav_generate); re-read the areas then.
+hook.Add("NavBuild_Done", "SeshBot_NavRebuilt", function()
+    navAreas = navmesh.GetAllNavAreas()
+    print("[Sesh Bots] Navmesh rebuilt (" .. #navAreas .. " areas).")
+end)
 
 -- Most maps used with Gmod Sesh only carry ONE actual info_player_* entity
 -- (confirmed on the maps causing "everyone spawns in the same spot" -- see
@@ -681,6 +694,18 @@ local function SpawnAllBots()
     if _G.SeshBot_ShowingScoreboard then return end
     if not navAreas or #navAreas == 0 then
         print("[Sesh Bots] No navmesh yet — waiting.")
+        -- The match can start while the navmesh is still being built (a map's
+        -- first load): bring the bots in as soon as it's ready, for up to 2 minutes.
+        if not timer.Exists("SeshBot_SpawnWhenNavReady") then
+            timer.Create("SeshBot_SpawnWhenNavReady", 2, 60, function()
+                if FFA_Active or not IsSeshMode() then
+                    timer.Remove("SeshBot_SpawnWhenNavReady")
+                elseif navAreas and #navAreas > 0 then
+                    timer.Remove("SeshBot_SpawnWhenNavReady")
+                    SpawnAllBots()
+                end
+            end)
+        end
         return
     end
 
