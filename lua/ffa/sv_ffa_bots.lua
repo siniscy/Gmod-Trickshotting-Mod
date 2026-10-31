@@ -266,9 +266,25 @@ end)
 -- ignores map spawn entities entirely and picks a fresh random point
 -- anywhere on the nav mesh instead, so the "only one spawn" limitation
 -- never applies in the first place.
+-- The engine loads the map's saved .nav again after InitPostEntity, which frees
+-- the areas CheckAndGenerateNav read (the cached handles turn NULL); a rebuild
+-- does the same. Calling a NULL area throws, and a throw inside a PlayerSpawn
+-- hook aborts the gamemode's PlayerSpawn, which is what creates the player's
+-- hands. Always pick areas through here. If nothing is loaded right now the old
+-- list is kept, so the next call simply re-reads it.
+local function RandomNavArea()
+    if not navAreas or #navAreas == 0 then return nil end
+    local area = navAreas[math.random(#navAreas)]
+    if IsValid(area) then return area end
+    local fresh = navmesh.GetAllNavAreas()
+    if #fresh == 0 then return nil end
+    navAreas = fresh
+    return navAreas[math.random(#navAreas)]
+end
+
 local function GetRandomNavPoint()
-    if navAreas and #navAreas > 0 then
-        local area = navAreas[math.random(#navAreas)]
+    local area = RandomNavArea()
+    if area then
         return area:GetRandomPoint() + Vector(0, 0, 10), Angle(0, math.random(0, 360), 0)
     end
     -- No navmesh yet (still generating, or generation failed) -- fall back
@@ -671,7 +687,8 @@ local function GetNavSpawnFarFrom(existing, minDist, ply)
     -- spawns actually spread out across the mesh instead of clustering.
     local bestPos, bestAng, bestD = nil, nil, -1
     for attempt = 1, 30 do
-        local area = navAreas[math.random(#navAreas)]
+        local area = RandomNavArea()
+        if not area then break end
         local pos  = area:GetRandomPoint()
         local minD = math.huge
         for _, ep in ipairs(existing) do
@@ -685,6 +702,7 @@ local function GetNavSpawnFarFrom(existing, minDist, ply)
             bestD, bestPos, bestAng = minD, pos, Angle(0, math.random(0, 360), 0)
         end
     end
+    if not bestPos then return GetSpawnFarFrom(existing, minDist) end
     return bestPos + Vector(0, 0, 10), bestAng
 end
 
