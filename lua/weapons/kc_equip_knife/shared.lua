@@ -18,7 +18,9 @@ SWEP.AdminSpawnable = false
 -- only thing kc_equip's quick-switch will select.
 SWEP.KC_IsEquipment = true
 
-SWEP.ViewModel  = "models/weapons/v_knife_t.mdl"
+-- The c_ model ships with GMod itself; v_knife_t.mdl needs CS:S mounted, and
+-- without it the knife was an ERROR model with no arms.
+SWEP.ViewModel  = "models/weapons/cstrike/c_knife_t.mdl"
 SWEP.WorldModel = "models/weapons/w_knife_t.mdl"
 SWEP.UseHands   = true
 SWEP.HoldType   = "knife"

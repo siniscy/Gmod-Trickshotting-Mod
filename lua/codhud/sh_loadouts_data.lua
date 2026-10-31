@@ -18,7 +18,7 @@ KC_Loadouts.WeaponPool = {
     { classname = "dread_m4",              name = "M4A1 (MW19)",           group = "Rifles/Snipers" },
     { classname = "dread_mp5",              name = "MP5 (MW19)",            group = "Rifles/Snipers" },
     { classname = "dread_kar98",             name = "Kar98k (WAW)",          group = "Rifles/Snipers" },
-    { classname = "dread_barr",              name = "Barrett (MW3)",         group = "Rifles/Snipers" },
+    { classname = "mw3_m82",                 name = "Barrett (MW3)",         group = "Rifles/Snipers" },
 
     { classname = "dread_1911",              name = "1911 (MW19)",           group = "Pistols" },
     { classname = "reha_de50taciw4",         name = "Desert Eagle Tac Knife", group = "Pistols" },

@@ -508,6 +508,16 @@ lua/
 
 ## 📝 Changelog
 
+### v1.0.5
+
+**Fixed**
+- **Combat Knife had no arms without Counter-Strike: Source.** Its viewmodel needed CS:S, so it was a red ERROR model on any install without it. It now uses the knife that ships with Garry's Mod and your normal player arms. Without CS:S content mounted the blade itself may still show the purple missing-texture pattern.
+- **Barrett (MW3) in the class menu** pointed at a weapon whose model doesn't exist, so it showed a red ERROR model. It's now reha's Barrett from SteezMod.
+- **Hands can no longer stay missing for a whole life.** The arms on most weapons are created during spawning, so a Lua error from any addon at that moment left every one of those weapons floating with no arms. The server now checks every second and rebuilds them.
+
+**Changed**
+- **Sesh Bots use a map's saved navmesh** instead of regenerating it on every load, and bots join as soon as the navmesh is ready if a match starts while it's still building.
+
 ### v1.0.4
 
 **Added**
